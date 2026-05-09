@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block content %}
+    <p>
+        <a href="{{ url_for('main.index') }}">&larr; Back to form</a>
+    </p>
+    <div class="actions">
+        <a href="{{ url_for('main.download') }}">
+            <button type="button">Download SVG</button>
+        </a>
+    </div>
+    <div class="preview">
+        {{ svg | safe }}
+    </div>
+{% endblock %}

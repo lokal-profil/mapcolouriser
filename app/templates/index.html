@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block content %}
+    {% if errors %}
+        <div class="errors" role="alert">
+            <strong>Please fix the following:</strong>
+            <ul>
+                {% for err in errors %}<li>{{ err }}</li>{% endfor %}
+            </ul>
+        </div>
+    {% endif %}
+
+    <form method="post" action="{{ url_for('main.generate') }}" id="colouriser-form">
+        <div id="groups">
+            {% for group in groups %}
+                <div class="group" data-index="{{ group.index }}">
+                    <div class="group-row">
+                        <label>
+                            Title
+                            <input name="group[{{ group.index }}][title]" type="text"
+                                   value="{{ group.title }}"
+                                   pattern="{{ title_pattern }}"
+                                   title="Letters, digits, spaces, and basic punctuation only — no &lt;, &gt;, /, * or \"
+                                   required />
+                        </label>
+                        <label>
+                            Colour (#rrggbb)
+                            <input name="group[{{ group.index }}][colour]" type="text"
+                                   value="{{ group.colour }}" placeholder="#ff0000"
+                                   pattern="{{ colour_pattern }}" required />
+                        </label>
+                    </div>
+                    <label>
+                        Countries
+                        <select name="group[{{ group.index }}][countries][]" multiple required>
+                            {% for display, code in countries %}
+                                <option value="{{ code }}"
+                                        {% if code in group.countries %}selected{% endif %}>
+                                    {{ display }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </label>
+                    <div class="actions">
+                        <button type="button" class="remove-group">Remove group</button>
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+
+        <div class="actions">
+            <button type="button" id="add-group">+ Add group</button>
+            <button type="submit">Generate map</button>
+        </div>
+    </form>
+
+    {# Hidden template for cloning new group blocks. #}
+    <template id="group-template">
+        <div class="group" data-index="__INDEX__">
+            <div class="group-row">
+                <label>
+                    Title
+                    <input name="group[__INDEX__][title]" type="text"
+                           pattern="{{ title_pattern }}"
+                           title="Letters, digits, spaces, and basic punctuation only — no &lt;, &gt;, /, * or \"
+                           required />
+                </label>
+                <label>
+                    Colour (#rrggbb)
+                    <input name="group[__INDEX__][colour]" type="text"
+                           placeholder="#ff0000" pattern="{{ colour_pattern }}" required />
+                </label>
+            </div>
+            <label>
+                Countries
+                <select name="group[__INDEX__][countries][]" multiple required>
+                    {% for display, code in countries %}
+                        <option value="{{ code }}">{{ display }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+            <div class="actions">
+                <button type="button" class="remove-group">Remove group</button>
+            </div>
+        </div>
+    </template>
+{% endblock %}
+
+{% block scripts %}
+    <script src="{{ url_for('static', filename='main.js') }}"></script>
+{% endblock %}

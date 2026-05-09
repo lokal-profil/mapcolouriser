@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.venv/
+*.egg-info/
+.coverage
+
+# Tooling caches and ephemeral artifacts
+.claude/
+.playwright-mcp/
+tmp/
