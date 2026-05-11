@@ -44,11 +44,19 @@ def test_real_world_map_starts_cleanly():
 
 
 class TestSecretKey:
-    def test_uses_explicit_secret_key_when_provided(self):
+    def test_uses_explicit_secret_key_when_provided(self, monkeypatch):
+        # Explicit arg wins over env var.
+        monkeypatch.setenv("FLASK_SECRET_KEY", "env-secret")
         app = create_app(secret_key="explicit-secret")
         assert app.config["SECRET_KEY"] == "explicit-secret"
 
-    def test_generates_random_key_when_none_provided(self):
+    def test_reads_secret_key_from_env(self, monkeypatch):
+        monkeypatch.setenv("FLASK_SECRET_KEY", "env-secret")
+        app = create_app()
+        assert app.config["SECRET_KEY"] == "env-secret"
+
+    def test_generates_random_key_when_no_arg_or_env(self, monkeypatch):
+        monkeypatch.delenv("FLASK_SECRET_KEY", raising=False)
         app1 = create_app()
         app2 = create_app()
         # Both apps have a usable key, and each gets its own.
