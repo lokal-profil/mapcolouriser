@@ -52,6 +52,17 @@ def render_map(key: str, css: str) -> str:
     return prefix + css + suffix
 
 
+def prepared_svg(key: str = DEFAULT_MAP) -> str:
+    """Return the prepared (viewBox-enriched) SVG with the marker intact.
+
+    Used by request handlers that need to serve the base SVG without any
+    injected user CSS — e.g. the ``/maps/<key>.svg`` endpoint that the
+    client-side live preview fetches.
+    """
+    prefix, suffix = _prepared(key)
+    return prefix + MARKER + suffix
+
+
 def prime_caches() -> None:
     """Force a one-time read+validate+split of every registered base map.
 

@@ -22,7 +22,7 @@ from app.colouriser import (
     build_css,
 )
 from app.countries import all_countries
-from app.maps import DEFAULT_MAP, MAPS, render_map
+from app.maps import DEFAULT_MAP, MAPS, prepared_svg, render_map
 
 bp = Blueprint("main", __name__)
 
@@ -73,6 +73,17 @@ def generate() -> Response | str:
     session[_SESSION_LAST_GROUPS] = raw_groups
 
     return render_template("result.html", svg=svg)
+
+
+@bp.get("/maps/<key>.svg")
+def base_map(key: str) -> Response:
+    if key not in MAPS:
+        return Response("Unknown map.", status=404)
+    return Response(
+        prepared_svg(key),
+        mimetype="image/svg+xml",
+        headers={"Cache-Control": "public, max-age=3600"},
+    )
 
 
 @bp.get("/download")

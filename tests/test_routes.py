@@ -178,6 +178,27 @@ class TestBackToForm:
         assert _selected_options(body, "group[1][countries][]") == set()
 
 
+class TestBaseMapEndpoint:
+    def test_returns_prepared_svg_for_known_key(self, client):
+        resp = client.get("/maps/world.svg")
+        assert resp.status_code == 200
+        assert resp.mimetype == "image/svg+xml"
+        body = resp.get_data(as_text=True)
+        assert "<svg" in body
+        # viewBox enrichment is applied; marker still present so callers can
+        # still distinguish "base SVG" from "user-CSS-injected SVG".
+        assert "viewBox=" in body
+        assert "/* INJECT_CSS_HERE */" in body
+
+    def test_returns_404_for_unknown_key(self, client):
+        resp = client.get("/maps/atlantis.svg")
+        assert resp.status_code == 404
+
+    def test_sets_cache_control_header(self, client):
+        resp = client.get("/maps/world.svg")
+        assert "max-age" in resp.headers.get("Cache-Control", "")
+
+
 class TestDownload:
     def test_returns_400_when_no_session(self, client):
         resp = client.get("/download")
