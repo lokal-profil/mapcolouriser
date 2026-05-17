@@ -14,11 +14,18 @@
         return;
     }
 
+    const submitBtn = form.querySelector('button[type="submit"]');
+
     let palette = [];
     try {
         palette = JSON.parse(form.dataset.defaultColours || "[]");
     } catch {
         palette = [];
+    }
+
+    function updateSubmitState() {
+        if (!submitBtn) return;
+        submitBtn.disabled = groupsContainer.querySelectorAll(".group").length === 0;
     }
 
     function nextIndex() {
@@ -53,14 +60,12 @@
         patchPlaceholders(fragment, idx);
         applyDefaultColour(fragment, idx);
         groupsContainer.appendChild(fragment);
+        updateSubmitState();
     }
 
     function removeGroup(groupEl) {
-        const remaining = groupsContainer.querySelectorAll(".group").length;
-        if (remaining <= 1) {
-            return;
-        }
         groupEl.remove();
+        updateSubmitState();
     }
 
     addBtn.addEventListener("click", addGroup);
@@ -73,4 +78,6 @@
             }
         }
     });
+
+    updateSubmitState();
 })();
