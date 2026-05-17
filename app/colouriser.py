@@ -14,7 +14,9 @@ COLOUR_PATTERN = "#[0-9a-fA-F]{6}"
 
 # Title pattern shared the same way. Rejects characters that could break out
 # of the surrounding CSS comment (``*/``) or the SVG ``<style>`` element.
-TITLE_PATTERN = r"[^<>/*\\]+"
+# ``/`` is escaped because HTML5 ``pattern=`` regex uses JS's ``v`` flag,
+# which reserves ``/`` as a syntax character inside character classes.
+TITLE_PATTERN = r"[^<>\/*\\]+"
 
 # Paul Tol's "muted" qualitative palette — colour-blind safe and designed for
 # categorical data. Tol's 10th colour (#DDDDDD, pale grey) is reserved for
