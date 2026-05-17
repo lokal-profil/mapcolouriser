@@ -5,12 +5,20 @@
 // than innerHTML to avoid any HTML-injection surface.
 
 (function () {
+    const form = document.getElementById("colouriser-form");
     const groupsContainer = document.getElementById("groups");
     const addBtn = document.getElementById("add-group");
     const tmpl = document.getElementById("group-template");
 
-    if (!groupsContainer || !addBtn || !tmpl) {
+    if (!form || !groupsContainer || !addBtn || !tmpl) {
         return;
+    }
+
+    let palette = [];
+    try {
+        palette = JSON.parse(form.dataset.defaultColours || "[]");
+    } catch {
+        palette = [];
     }
 
     function nextIndex() {
@@ -31,10 +39,19 @@
         });
     }
 
+    function applyDefaultColour(root, idx) {
+        if (palette.length === 0) return;
+        const colourInput = root.querySelector('input[type="color"]');
+        if (colourInput) {
+            colourInput.value = palette[idx % palette.length];
+        }
+    }
+
     function addGroup() {
         const idx = nextIndex();
         const fragment = tmpl.content.cloneNode(true);
         patchPlaceholders(fragment, idx);
+        applyDefaultColour(fragment, idx);
         groupsContainer.appendChild(fragment);
     }
 

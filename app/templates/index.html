@@ -9,7 +9,8 @@
         </div>
     {% endif %}
 
-    <form method="post" action="{{ url_for('main.generate') }}" id="colouriser-form">
+    <form method="post" action="{{ url_for('main.generate') }}" id="colouriser-form"
+          data-default-colours='{{ default_colours | tojson }}'>
         <div id="groups">
             {% for group in groups %}
                 <div class="group" data-index="{{ group.index }}">
@@ -23,10 +24,10 @@
                                    required />
                         </label>
                         <label>
-                            Colour (#rrggbb)
-                            <input name="group[{{ group.index }}][colour]" type="text"
-                                   value="{{ group.colour }}" placeholder="#ff0000"
-                                   pattern="{{ colour_pattern }}" required />
+                            Colour
+                            <input name="group[{{ group.index }}][colour]" type="color"
+                                   value="{{ group.colour or default_colours[group.index % default_colours|length] }}"
+                                   required />
                         </label>
                     </div>
                     <label>
@@ -65,9 +66,9 @@
                            required />
                 </label>
                 <label>
-                    Colour (#rrggbb)
-                    <input name="group[__INDEX__][colour]" type="text"
-                           placeholder="#ff0000" pattern="{{ colour_pattern }}" required />
+                    Colour
+                    <input name="group[__INDEX__][colour]" type="color"
+                           value="#000000" required />
                 </label>
             </div>
             <label>

@@ -49,6 +49,21 @@ class TestIndex:
         assert 'value="de"' in body
         assert "Sweden" in body
 
+    def test_default_colours_are_applied_to_initial_groups(self, client):
+        # The two default groups should pre-fill the colour input with the
+        # first two colours of the Tol Muted palette.
+        body = client.get("/").get_data(as_text=True)
+        assert 'value="#332288"' in body  # group 0 — indigo
+        assert 'value="#88CCEE"' in body  # group 1 — cyan
+
+    def test_palette_is_embedded_in_form_dataset(self, client):
+        # main.js reads ``data-default-colours`` to assign defaults to groups
+        # added at runtime.
+        body = client.get("/").get_data(as_text=True)
+        assert "data-default-colours=" in body
+        assert "#332288" in body
+        assert "#AA4499" in body  # last colour, sanity check the full list ships
+
 
 class TestGenerate:
     def test_valid_post_renders_inline_svg(self, client):

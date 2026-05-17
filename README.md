@@ -36,6 +36,7 @@ uv run python scripts/check_svg_marker.py
 ## Credits
 
 - [`BlankMap-World.svg`](https://commons.wikimedia.org/wiki/File:BlankMap-World.svg) by Canuckguy, et al. — public domain.
+- Default group colours from the [Tol "Muted" qualitative palette](https://sronpersonalpages.nl/~pault/) by Paul Tol (SRON) — colour-blind safe.
 
 ## AI assistance disclosure
 

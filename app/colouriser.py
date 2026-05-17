@@ -8,13 +8,29 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-# Hex colour pattern shared between server-side validation and the form's
-# ``pattern=`` attribute, so the rule lives in exactly one place.
+# Hex colour pattern for server-side validation. ``<input type="color">``
+# always emits ``#rrggbb``, but we re-validate to catch non-browser clients.
 COLOUR_PATTERN = "#[0-9a-fA-F]{6}"
 
 # Title pattern shared the same way. Rejects characters that could break out
 # of the surrounding CSS comment (``*/``) or the SVG ``<style>`` element.
 TITLE_PATTERN = r"[^<>/*\\]+"
+
+# Paul Tol's "muted" qualitative palette — colour-blind safe and designed for
+# categorical data. Tol's 10th colour (#DDDDDD, pale grey) is reserved for
+# "missing/bad data" and intentionally omitted here so groups never default
+# to the same neutral the SVG uses for un-coloured land.
+DEFAULT_GROUP_COLOURS = (
+    "#332288",  # indigo
+    "#88CCEE",  # cyan
+    "#44AA99",  # teal
+    "#117733",  # green
+    "#999933",  # olive
+    "#DDCC77",  # sand
+    "#CC6677",  # rose
+    "#882255",  # wine
+    "#AA4499",  # purple
+)
 
 _TITLE_RE = re.compile(f"^{TITLE_PATTERN}$")
 _COLOUR_RE = re.compile(f"^{COLOUR_PATTERN}$")

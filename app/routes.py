@@ -14,7 +14,13 @@ from flask import (
     session,
 )
 
-from app.colouriser import COLOUR_PATTERN, TITLE_PATTERN, Group, build_css
+from app.colouriser import (
+    COLOUR_PATTERN,
+    DEFAULT_GROUP_COLOURS,
+    TITLE_PATTERN,
+    Group,
+    build_css,
+)
 from app.countries import all_countries
 from app.maps import DEFAULT_MAP, MAPS, render_map
 
@@ -39,8 +45,8 @@ def index() -> str:
         countries=all_countries(),
         groups=session.get(_SESSION_LAST_GROUPS) or _default_form_state(),
         errors=[],
-        colour_pattern=COLOUR_PATTERN,
         title_pattern=TITLE_PATTERN,
+        default_colours=DEFAULT_GROUP_COLOURS,
     )
 
 
@@ -56,8 +62,8 @@ def generate() -> Response | str:
             countries=all_countries(),
             groups=raw_groups or _default_form_state(),
             errors=errors,
-            colour_pattern=COLOUR_PATTERN,
             title_pattern=TITLE_PATTERN,
+            default_colours=DEFAULT_GROUP_COLOURS,
         )
 
     groups = _build_groups(raw_groups)
