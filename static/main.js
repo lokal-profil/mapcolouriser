@@ -16,6 +16,8 @@
     const previewContainer = document.getElementById("map-preview");
     const toggleInput = document.getElementById("toggle-live-preview");
     const downloadBtn = document.getElementById("download-svg");
+    const legendOutput = document.getElementById("legend-output");
+    const copyBtn = document.getElementById("copy-legend");
 
     if (!form || !groupsContainer || !addBtn || !tmpl) {
         return;
@@ -113,6 +115,15 @@
             .join("\n\n");
     }
 
+    function buildLegend(state) {
+        // Skip groups missing either a title or country selection — a legend
+        // entry without a label or without a corresponding map fill is noise.
+        return state
+            .filter(g => g.title.trim() && g.codes.length > 0)
+            .map(g => `{{Legend|${g.colour}|${g.title}}}`)
+            .join("\n");
+    }
+
     function initMap(key) {
         if (!previewContainer) return;
         fetch(`/maps/${key}.svg`)
@@ -129,7 +140,7 @@
                 userStyleEl = document.createElementNS("http://www.w3.org/2000/svg", "style");
                 userStyleEl.id = "user-style";
                 svg.appendChild(userStyleEl);
-                rebuildPreview();
+                refreshOutputs();
             })
             .catch(err => {
                 previewContainer.textContent = `Preview unavailable (${err.message}).`;
@@ -141,16 +152,29 @@
         userStyleEl.textContent = buildCss(getGroupState());
     }
 
+    function rebuildLegend() {
+        if (!livePreviewEnabled || !legendOutput) return;
+        const legend = buildLegend(getGroupState());
+        legendOutput.value = legend;
+        // Grow with content; floor at 2 so the textarea is visible when empty.
+        legendOutput.rows = Math.max(2, legend ? legend.split("\n").length : 0);
+    }
+
+    function refreshOutputs() {
+        rebuildPreview();
+        rebuildLegend();
+    }
+
     function requestUpdate() {
         if (!livePreviewEnabled) return;
         clearTimeout(updateTimer);
-        updateTimer = setTimeout(rebuildPreview, 250);
+        updateTimer = setTimeout(refreshOutputs, 250);
     }
 
     function setLivePreviewEnabled(enabled) {
         livePreviewEnabled = enabled;
         document.documentElement.classList.toggle("live-preview", enabled);
-        if (enabled) rebuildPreview();
+        if (enabled) refreshOutputs();
         updateActionState();
     }
 
@@ -193,6 +217,20 @@
     }
     if (downloadBtn) {
         downloadBtn.addEventListener("click", downloadSvg);
+    }
+    if (copyBtn && legendOutput) {
+        copyBtn.addEventListener("click", async () => {
+            try {
+                await navigator.clipboard.writeText(legendOutput.value);
+                const original = copyBtn.textContent;
+                copyBtn.textContent = "Copied!";
+                setTimeout(() => { copyBtn.textContent = original; }, 1000);
+            } catch {
+                // Insecure context or permission denied — fall back to selecting
+                // the text so the user can copy manually.
+                legendOutput.select();
+            }
+        });
     }
 
     // Live preview swallows Enter-key submissions on the form (the submit
