@@ -1,6 +1,14 @@
 # mapcolouriser
 
-A small Flask web app that colours regions on a hardcoded SVG world map by user-defined groups, then offers an inline preview and download. Targets Wikimedia Toolforge (Python 3.11).
+A small Flask web app that colours regions on a hardcoded SVG world map by user-defined groups, with a live in-browser preview and SVG download. JavaScript-disabled clients get a server-rendered result page as a fallback. Targets Wikimedia Toolforge (Python 3.11).
+
+## Features
+
+- Live in-browser preview that updates as you edit (debounced).
+- Native HTML5 colour picker with a colour-blind-safe default palette.
+- Client-side SVG download via Blob — no round-trip to the server.
+- JavaScript-disabled fallback: server-rendered result page with the same download.
+- Toggle live preview on/off (accessibility / weak-device opt-out).
 
 ## Quick start
 

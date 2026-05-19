@@ -10,7 +10,8 @@
     {% endif %}
 
     <form method="post" action="{{ url_for('main.generate') }}" id="colouriser-form"
-          data-default-colours='{{ default_colours | tojson }}'>
+          data-default-colours='{{ default_colours | tojson }}'
+          data-map-key="{{ map_key }}">
         <div id="groups">
             {% for group in groups %}
                 <div class="group" data-index="{{ group.index }}">
@@ -48,9 +49,16 @@
             {% endfor %}
         </div>
 
+        <div id="map-preview" class="preview"></div>
+
         <div class="actions">
             <button type="button" id="add-group">+ Add group</button>
-            <button type="submit">Generate map</button>
+            <button type="submit" class="js-fallback">Generate map</button>
+            <button type="button" id="download-svg" class="js-live">Download SVG</button>
+            <label class="live-preview-toggle js-only">
+                <input type="checkbox" id="toggle-live-preview" checked />
+                Live preview
+            </label>
         </div>
     </form>
 
