@@ -23,10 +23,23 @@
         .preview svg { display: block; width: 100%; height: auto; max-height: 80vh; max-width: 100%; }
         .live-preview-toggle { display: inline-flex; gap: 0.3rem; align-items: center; margin-left: auto; }
 
+        /* Stack form and preview on narrow viewports; side-by-side at >=900px
+           but only when live preview is active. Widen the body too so each
+           column gets breathing room — single-column layouts keep the
+           default 960px max-width. */
+        .layout { display: flex; flex-direction: column; gap: 1rem; }
+        .preview-pane .preview { margin-top: 0; }
+        @media (min-width: 900px) {
+            html.live-preview body { max-width: 1280px; }
+            html.live-preview .layout { display: grid; grid-template-columns: 1fr 2fr; align-items: start; }
+            html.live-preview .preview-pane { position: sticky; top: 1rem; }
+        }
+
         /* Progressive enhancement: hide JS-only affordances when JS is off,
            and swap between live-preview and fallback flows via a class on
            <html> (set above to avoid FOUC). */
         html:not(.js-enabled) .js-only { display: none; }
+        html:not(.js-enabled) .preview-pane { display: none; }
         html:not(.live-preview) #map-preview,
         html:not(.live-preview) .js-live { display: none; }
         html.live-preview .js-fallback { display: none; }

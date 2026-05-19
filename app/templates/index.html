@@ -9,58 +9,64 @@
         </div>
     {% endif %}
 
-    <form method="post" action="{{ url_for('main.generate') }}" id="colouriser-form"
-          data-default-colours='{{ default_colours | tojson }}'
-          data-map-key="{{ map_key }}">
-        <div id="groups">
-            {% for group in groups %}
-                <div class="group" data-index="{{ group.index }}">
-                    <div class="group-row">
+    <div class="layout">
+        <form method="post" action="{{ url_for('main.generate') }}" id="colouriser-form"
+              data-default-colours='{{ default_colours | tojson }}'
+              data-map-key="{{ map_key }}">
+            <div id="groups">
+                {% for group in groups %}
+                    <div class="group" data-index="{{ group.index }}">
+                        <div class="group-row">
+                            <label>
+                                Title
+                                <input name="group[{{ group.index }}][title]" type="text"
+                                       value="{{ group.title }}"
+                                       pattern="{{ title_pattern }}"
+                                       title="Letters, digits, spaces, and basic punctuation only — no &lt;, &gt;, /, * or \"
+                                       required />
+                            </label>
+                            <label>
+                                Colour
+                                <input name="group[{{ group.index }}][colour]" type="color"
+                                       value="{{ group.colour or default_colours[group.index % default_colours|length] }}"
+                                       required />
+                            </label>
+                        </div>
                         <label>
-                            Title
-                            <input name="group[{{ group.index }}][title]" type="text"
-                                   value="{{ group.title }}"
-                                   pattern="{{ title_pattern }}"
-                                   title="Letters, digits, spaces, and basic punctuation only — no &lt;, &gt;, /, * or \"
-                                   required />
+                            Countries
+                            <select name="group[{{ group.index }}][countries][]" multiple required>
+                                {% for display, code in countries %}
+                                    <option value="{{ code }}"
+                                            {% if code in group.countries %}selected{% endif %}>
+                                        {{ display }}
+                                    </option>
+                                {% endfor %}
+                            </select>
                         </label>
-                        <label>
-                            Colour
-                            <input name="group[{{ group.index }}][colour]" type="color"
-                                   value="{{ group.colour or default_colours[group.index % default_colours|length] }}"
-                                   required />
-                        </label>
+                        <div class="actions">
+                            <button type="button" class="remove-group">Remove group</button>
+                        </div>
                     </div>
-                    <label>
-                        Countries
-                        <select name="group[{{ group.index }}][countries][]" multiple required>
-                            {% for display, code in countries %}
-                                <option value="{{ code }}"
-                                        {% if code in group.countries %}selected{% endif %}>
-                                    {{ display }}
-                                </option>
-                            {% endfor %}
-                        </select>
-                    </label>
-                    <div class="actions">
-                        <button type="button" class="remove-group">Remove group</button>
-                    </div>
-                </div>
-            {% endfor %}
-        </div>
+                {% endfor %}
+            </div>
 
-        <div id="map-preview" class="preview"></div>
+            <div class="actions">
+                <button type="button" id="add-group">+ Add group</button>
+                <button type="submit" class="js-fallback">Generate map</button>
+            </div>
+        </form>
 
-        <div class="actions">
-            <button type="button" id="add-group">+ Add group</button>
-            <button type="submit" class="js-fallback">Generate map</button>
-            <button type="button" id="download-svg" class="js-live">Download SVG</button>
-            <label class="live-preview-toggle js-only">
-                <input type="checkbox" id="toggle-live-preview" checked />
-                Live preview
-            </label>
-        </div>
-    </form>
+        <aside class="preview-pane">
+            <div id="map-preview" class="preview"></div>
+            <div class="actions">
+                <button type="button" id="download-svg" class="js-live">Download SVG</button>
+                <label class="live-preview-toggle js-only">
+                    <input type="checkbox" id="toggle-live-preview" checked />
+                    Live preview
+                </label>
+            </div>
+        </aside>
+    </div>
 
     {# Hidden template for cloning new group blocks. #}
     <template id="group-template">
