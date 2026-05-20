@@ -4,23 +4,55 @@
 // placeholder in `name` and `data-index` attributes. Uses cloneNode rather
 // than innerHTML to avoid any HTML-injection surface.
 //
-// When live preview is enabled, fetches the prepared base SVG from
-// /maps/<key>.svg, injects it into #map-preview, and appends a <style> element
-// that we rewrite from the form state on every (debounced) change.
+// Always fetches the prepared base SVG from /maps/<key>.svg, injects it into
+// #map-preview, and appends a <style> element that we rewrite from the form
+// state on every (debounced) change while live preview is enabled.
+//
+// Exported as an ES module: index.html loads it with <script type="module">
+// and calls `createApp().init()`. Tests import the pure helpers and the
+// factory directly without triggering DOM side effects.
 
-(function () {
-    const form = document.getElementById("colouriser-form");
-    const groupsContainer = document.getElementById("groups");
-    const addBtn = document.getElementById("add-group");
-    const tmpl = document.getElementById("group-template");
-    const previewContainer = document.getElementById("map-preview");
-    const toggleInput = document.getElementById("toggle-live-preview");
-    const downloadBtn = document.getElementById("download-svg");
-    const legendOutput = document.getElementById("legend-output");
-    const copyBtn = document.getElementById("copy-legend");
+export function buildCss(state) {
+    return state
+        .filter(g => g.codes.length > 0)
+        .map(g => {
+            // Visual-only safety net so a mid-edit `*/` typo doesn't break
+            // the preview's CSS comment. The real defence against unsafe
+            // titles is form.checkValidity() before Blob download.
+            const safeTitle = g.title.replace(/\*\//g, "* /");
+            const selector = g.codes.map(c => `.${c}`).join(", ");
+            return `\n/* ${safeTitle} */\n${selector} { fill: ${g.colour}; }\n`;
+        })
+        .join("");
+}
+
+export function buildLegend(state) {
+    // Skip groups missing either a title or country selection — a legend
+    // entry without a label or without a corresponding map fill is noise.
+    return state
+        .filter(g => g.title.trim() && g.codes.length > 0)
+        .map(g => `{{Legend|${g.colour}|${g.title}}}`)
+        .join("\n");
+}
+
+export function createApp(doc = document) {
+    const form = doc.getElementById("colouriser-form");
+    const groupsContainer = doc.getElementById("groups");
+    const addBtn = doc.getElementById("add-group");
+    const tmpl = doc.getElementById("group-template");
+    const previewContainer = doc.getElementById("map-preview");
+    const toggleInput = doc.getElementById("toggle-live-preview");
+    const downloadBtn = doc.getElementById("download-svg");
+    const legendOutput = doc.getElementById("legend-output");
+    const copyBtn = doc.getElementById("copy-legend");
 
     if (!form || !groupsContainer || !addBtn || !tmpl) {
-        return;
+        // Unreachable in production (the template ships all four IDs). Logged
+        // so a future template rename surfaces here instead of going dead.
+        console.error("map-colouriser: required DOM elements missing; aborting init", {
+            form: !!form, groupsContainer: !!groupsContainer, addBtn: !!addBtn, tmpl: !!tmpl,
+        });
+        return null;
     }
 
     let palette = [];
@@ -32,7 +64,7 @@
     }
 
     const mapKey = form.dataset.mapKey || "world";
-    let livePreviewEnabled = document.documentElement.classList.contains("live-preview");
+    let livePreviewEnabled = doc.documentElement.classList.contains("live-preview");
     let userStyleEl = null;
     let updateTimer = null;
     // Gates the Download SVG button — true only once initMap has fetched and
@@ -105,32 +137,9 @@
         });
     }
 
-    function buildCss(state) {
-        return state
-            .filter(g => g.codes.length > 0)
-            .map(g => {
-                // Visual-only safety net so a mid-edit `*/` typo doesn't break
-                // the preview's CSS comment. The real defence against unsafe
-                // titles is form.checkValidity() before Blob download.
-                const safeTitle = g.title.replace(/\*\//g, "* /");
-                const selector = g.codes.map(c => `.${c}`).join(", ");
-                return `\n/* ${safeTitle} */\n${selector} { fill: ${g.colour}; }\n`;
-            })
-            .join("");
-    }
-
-    function buildLegend(state) {
-        // Skip groups missing either a title or country selection — a legend
-        // entry without a label or without a corresponding map fill is noise.
-        return state
-            .filter(g => g.title.trim() && g.codes.length > 0)
-            .map(g => `{{Legend|${g.colour}|${g.title}}}`)
-            .join("\n");
-    }
-
     function initMap(key) {
-        if (!previewContainer) return;
-        fetch(`/maps/${key}.svg`)
+        if (!previewContainer) return Promise.resolve();
+        return fetch(`/maps/${key}.svg`)
             .then(r => {
                 if (!r.ok) throw new Error(`HTTP ${r.status}`);
                 return r.text();
@@ -138,8 +147,8 @@
             .then(svgText => {
                 const declMatch = svgText.match(/^<\?xml[^?]*\?>/);
                 if (declMatch) xmlDeclaration = declMatch[0];
-                const doc = new DOMParser().parseFromString(svgText, "image/svg+xml");
-                const svg = doc.documentElement;
+                const parsedDoc = new DOMParser().parseFromString(svgText, "image/svg+xml");
+                const svg = parsedDoc.documentElement;
                 // DOMParser doesn't throw on malformed XML; it returns a
                 // document whose root is <parsererror>. Detect and rethrow so
                 // the catch handler below renders a useful message.
@@ -147,7 +156,7 @@
                     throw new Error("base map SVG failed to parse");
                 }
                 previewContainer.replaceChildren(svg);
-                userStyleEl = document.createElementNS("http://www.w3.org/2000/svg", "style");
+                userStyleEl = doc.createElementNS("http://www.w3.org/2000/svg", "style");
                 userStyleEl.id = "map-colouriser-style";
                 svg.appendChild(userStyleEl);
                 mapLoaded = true;
@@ -188,7 +197,7 @@
 
     function setLivePreviewEnabled(enabled) {
         livePreviewEnabled = enabled;
-        document.documentElement.classList.toggle("live-preview", enabled);
+        doc.documentElement.classList.toggle("live-preview", enabled);
         if (enabled) refreshOutputs();
         updateActionState();
     }
@@ -203,60 +212,75 @@
         const xml = xmlDeclaration ? `${xmlDeclaration}\n${body}` : body;
         const blob = new Blob([xml], { type: "image/svg+xml;charset=utf-8" });
         const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
+        const a = doc.createElement("a");
         a.href = url;
         a.download = "map.svg";
-        document.body.appendChild(a);
+        doc.body.appendChild(a);
         a.click();
         a.remove();
         URL.revokeObjectURL(url);
     }
 
-    addBtn.addEventListener("click", addGroup);
+    function init() {
+        addBtn.addEventListener("click", addGroup);
 
-    groupsContainer.addEventListener("click", function (e) {
-        if (e.target.matches(".remove-group")) {
-            const groupEl = e.target.closest(".group");
-            if (groupEl) {
-                removeGroup(groupEl);
-            }
-        }
-    });
-
-    form.addEventListener("input", requestUpdate);
-    form.addEventListener("change", requestUpdate);
-
-    if (toggleInput) {
-        toggleInput.addEventListener("change", e => setLivePreviewEnabled(e.target.checked));
-    }
-    if (downloadBtn) {
-        downloadBtn.addEventListener("click", downloadSvg);
-    }
-    if (copyBtn && legendOutput) {
-        copyBtn.addEventListener("click", async () => {
-            const original = copyBtn.textContent;
-            try {
-                await navigator.clipboard.writeText(legendOutput.value);
-                copyBtn.textContent = "Copied!";
-                setTimeout(() => { copyBtn.textContent = original; }, 1000);
-            } catch (err) {
-                // Insecure context or permission denied — fall back to selecting
-                // the text so the user can copy manually with Ctrl+C.
-                console.warn("map-colouriser: clipboard write failed, falling back to selection", err);
-                legendOutput.select();
-                copyBtn.textContent = "Copy failed";
-                setTimeout(() => { copyBtn.textContent = original; }, 2000);
+        groupsContainer.addEventListener("click", function (e) {
+            if (e.target.matches(".remove-group")) {
+                const groupEl = e.target.closest(".group");
+                if (groupEl) {
+                    removeGroup(groupEl);
+                }
             }
         });
+
+        form.addEventListener("input", requestUpdate);
+        form.addEventListener("change", requestUpdate);
+
+        if (toggleInput) {
+            toggleInput.addEventListener("change", e => setLivePreviewEnabled(e.target.checked));
+        }
+        if (downloadBtn) {
+            downloadBtn.addEventListener("click", downloadSvg);
+        }
+        if (copyBtn && legendOutput) {
+            copyBtn.addEventListener("click", async () => {
+                const original = copyBtn.textContent;
+                try {
+                    await navigator.clipboard.writeText(legendOutput.value);
+                    copyBtn.textContent = "Copied!";
+                    setTimeout(() => { copyBtn.textContent = original; }, 1000);
+                } catch (err) {
+                    // Insecure context or permission denied — fall back to selecting
+                    // the text so the user can copy manually with Ctrl+C.
+                    console.warn("map-colouriser: clipboard write failed, falling back to selection", err);
+                    legendOutput.select();
+                    copyBtn.textContent = "Copy failed";
+                    setTimeout(() => { copyBtn.textContent = original; }, 2000);
+                }
+            });
+        }
+
+        form.addEventListener("submit", e => {
+            // Live preview swallows Enter-key submissions on the form (the submit
+            // button itself is CSS-hidden in that mode); explicit Download SVG
+            // click remains the only way to download.
+            if (livePreviewEnabled) e.preventDefault();
+        });
+
+        updateActionState();
+        initMap(mapKey);
     }
 
-    // Live preview swallows Enter-key submissions on the form (the submit
-    // button itself is CSS-hidden in that mode); explicit Download SVG click
-    // remains the only way to download.
-    form.addEventListener("submit", e => {
-        if (livePreviewEnabled) e.preventDefault();
-    });
-
-    updateActionState();
-    initMap(mapKey);
-})();
+    return {
+        init,
+        // Internal handlers exposed for tests and used by init() to wire up
+        // listeners. Direct invocation in tests is often clearer than
+        // synthesising the event that would dispatch the same handler.
+        addGroup,
+        removeGroup,
+        downloadSvg,
+        initMap,
+        setLivePreviewEnabled,
+        getGroupState,
+    };
+}

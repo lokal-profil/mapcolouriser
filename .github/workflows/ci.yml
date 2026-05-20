@@ -16,8 +16,20 @@ jobs:
         with:
           enable-cache: true
 
-      - name: Install dependencies
+      - name: Install Python dependencies
         run: uv sync --frozen
+
+      - name: Enable corepack (provides pnpm pinned in package.json)
+        run: corepack enable
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "pnpm"
+
+      - name: Install JS dependencies
+        run: pnpm install --frozen-lockfile
 
       # The four checks below run independently — `if: always()` ensures all
       # results surface even when an earlier one fails.
@@ -33,6 +45,10 @@ jobs:
       - name: pytest
         if: always()
         run: uv run pytest
+
+      - name: vitest
+        if: always()
+        run: pnpm test
 
       - name: SVG marker check
         if: always()

@@ -5,6 +5,7 @@ __pycache__/
 .venv/
 *.egg-info/
 .coverage
+node_modules/
 
 # Tooling caches and ephemeral artifacts
 .claude/

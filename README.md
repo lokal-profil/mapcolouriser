@@ -27,6 +27,15 @@ uv run ruff check
 uv run python scripts/check_svg.py
 ```
 
+JS tests for the live-preview / download / legend pipeline use Vitest + jsdom.
+Managed via pnpm (pinned in `package.json`'s `packageManager` field; `corepack
+enable` lets your Node install run it transparently):
+
+```bash
+pnpm install   # one-time, dev-only — the Flask app itself has no Node dep
+pnpm test
+```
+
 ## Layout
 
 - `app/` — Flask app (factory, routes, pure helpers)

@@ -107,5 +107,8 @@
 {% endblock %}
 
 {% block scripts %}
-    <script src="{{ url_for('static', filename='main.js') }}"></script>
+    <script type="module">
+        import { createApp } from "{{ url_for('static', filename='main.js') }}";
+        createApp()?.init();
+    </script>
 {% endblock %}
