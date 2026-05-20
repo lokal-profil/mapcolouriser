@@ -1,5 +1,4 @@
-"""Startup defence-in-depth: ``create_app()`` must reject base maps that
-are missing the injection marker."""
+"""Startup defence-in-depth: ``create_app()`` must reject malformed base maps."""
 
 from __future__ import annotations
 
@@ -18,14 +17,25 @@ def _clear_prepared_cache():
     maps_module._prepared.cache_clear()
 
 
-def test_raises_when_base_map_missing_marker(monkeypatch, tmp_path):
+def test_raises_when_base_map_is_not_well_formed_svg(monkeypatch, tmp_path):
     bad = tmp_path / "bad.svg"
-    bad.write_text("<svg><style>/* no marker here */</style></svg>")
+    bad.write_text("<svg><unclosed></svg>")  # malformed XML
 
     monkeypatch.setattr(maps_module, "STATIC_DIR", tmp_path)
     monkeypatch.setattr(maps_module, "MAPS", {"bad": "bad.svg"})
 
-    with pytest.raises(RuntimeError, match="injection marker"):
+    with pytest.raises(RuntimeError, match="well-formed SVG"):
+        create_app(secret_key="test-secret")
+
+
+def test_raises_when_base_map_is_not_an_svg(monkeypatch, tmp_path):
+    bad = tmp_path / "bad.svg"
+    bad.write_text("<html><body/></html>")
+
+    monkeypatch.setattr(maps_module, "STATIC_DIR", tmp_path)
+    monkeypatch.setattr(maps_module, "MAPS", {"bad": "bad.svg"})
+
+    with pytest.raises(RuntimeError, match="well-formed SVG"):
         create_app(secret_key="test-secret")
 
 

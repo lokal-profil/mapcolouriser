@@ -1,18 +1,16 @@
-"""Marker validation and CSS injection for the base SVG.
+"""SVG validation and viewBox enrichment for base maps.
 
-Single source of truth for the marker constant and validation rule. Both the
-Flask app's startup check and the CI script call into this module so they
-cannot drift.
+``validate_svg`` is the single rule used by both the Flask app's startup
+check and the CI script, so the two cannot drift.
 """
 
 from __future__ import annotations
 
 import logging
 import re
+from xml.etree import ElementTree
 
 logger = logging.getLogger(__name__)
-
-MARKER = "/* INJECT_CSS_HERE */"
 
 _SVG_OPEN_RE = re.compile(r"<svg\b([^>]*)>", re.IGNORECASE)
 _VIEWBOX_RE = re.compile(r"\bviewBox\s*=", re.IGNORECASE)
@@ -20,21 +18,20 @@ _WIDTH_RE = re.compile(r'\bwidth\s*=\s*"([^"]+)"', re.IGNORECASE)
 _HEIGHT_RE = re.compile(r'\bheight\s*=\s*"([^"]+)"', re.IGNORECASE)
 _DIMENSION_RE = re.compile(r"^([+-]?\d+(?:\.\d+)?)(px|pt|pc|mm|cm|in|em|rem|ex)?$")
 
+_SVG_NS = "http://www.w3.org/2000/svg"
+
 
 def validate_svg(svg_text: str) -> bool:
-    """Return True iff the marker appears exactly once."""
-    return svg_text.count(MARKER) == 1
+    """Return True iff the text parses as XML rooted at ``<svg>``.
 
-
-def inject_css(svg_text: str, css: str) -> str:
-    """Replace every occurrence of the marker with ``css``.
-
-    Raises ``ValueError`` if no marker is present. Callers should validate
-    via ``validate_svg`` first to ensure exactly one marker.
+    Catches truncated, malformed, or non-SVG files before they reach
+    request handling or the JS preview.
     """
-    if MARKER not in svg_text:
-        raise ValueError("injection marker not found in SVG")
-    return svg_text.replace(MARKER, css)
+    try:
+        root = ElementTree.fromstring(svg_text)
+    except ElementTree.ParseError:
+        return False
+    return root.tag in ("svg", f"{{{_SVG_NS}}}svg")
 
 
 def add_viewbox_if_missing(svg_text: str) -> str:

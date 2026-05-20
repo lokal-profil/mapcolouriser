@@ -138,7 +138,7 @@
                 const svg = doc.documentElement;
                 previewContainer.replaceChildren(svg);
                 userStyleEl = document.createElementNS("http://www.w3.org/2000/svg", "style");
-                userStyleEl.id = "user-style";
+                userStyleEl.id = "map-colouriser-style";
                 svg.appendChild(userStyleEl);
                 refreshOutputs();
             })

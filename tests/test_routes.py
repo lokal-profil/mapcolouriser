@@ -79,8 +79,8 @@ class TestGenerate:
         body = resp.get_data(as_text=True)
         assert "<svg" in body
         assert "#ff0000" in body
-        # Marker must be replaced, not still present.
-        assert "/* INJECT_CSS_HERE */" not in body
+        # User CSS appended as a <style id="map-colouriser-style"> element.
+        assert '<style id="map-colouriser-style">' in body
 
     def test_invalid_colour_rerenders_form_with_error(self, client):
         resp = client.post(
@@ -185,10 +185,10 @@ class TestBaseMapEndpoint:
         assert resp.mimetype == "image/svg+xml"
         body = resp.get_data(as_text=True)
         assert "<svg" in body
-        # viewBox enrichment is applied; marker still present so callers can
-        # still distinguish "base SVG" from "user-CSS-injected SVG".
+        # viewBox enrichment is applied; the prepared SVG carries no user CSS
+        # (the client-side preview appends its own <style id="map-colouriser-style">).
         assert "viewBox=" in body
-        assert "/* INJECT_CSS_HERE */" in body
+        assert '<style id="map-colouriser-style">' not in body
 
     def test_returns_404_for_unknown_key(self, client):
         resp = client.get("/maps/atlantis.svg")

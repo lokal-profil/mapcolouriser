@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""CI marker validation for every registered base map.
+"""CI SVG validation for every registered base map.
 
 Imports ``validate_svg`` from ``app.svg_injector`` and ``MAPS`` from
 ``app.maps`` so this script and the runtime cannot disagree on the rule.
@@ -29,7 +29,7 @@ def main() -> int:
             continue
         if not validate_svg(svg_text):
             print(
-                f"FAIL {key} ({filename}): expected exactly one injection marker",
+                f"FAIL {key} ({filename}): not a well-formed SVG",
                 file=sys.stderr,
             )
             failed = True

@@ -24,22 +24,24 @@ Open <http://127.0.0.1:5000>.
 ```bash
 uv run pytest
 uv run ruff check
-uv run python scripts/check_svg_marker.py
+uv run python scripts/check_svg.py
 ```
 
 ## Layout
 
 - `app/` — Flask app (factory, routes, pure helpers)
 - `static/` — base map(s); see `app/maps.py` for the registry
-- `scripts/check_svg_marker.py` — CI-side marker validation
+- `scripts/check_svg.py` — CI-side SVG validation
 - `tests/` — pytest suite
 
 ## Adding a new base map
 
-1. Drop the SVG in `static/`. It must contain exactly one `/* INJECT_CSS_HERE */` marker inside a `<style>` block.
+1. Drop a well-formed SVG in `static/`.
 2. Add an entry to `MAPS` in `app/maps.py` (internal key → on-disk filename).
 3. Country paths must carry the lowercase ISO 3166-1 alpha-2 code as a CSS class.
 4. If the SVG lacks a `viewBox`, one is derived from its `width`/`height` at render time so the preview scales on small screens. To control the crop yourself, set `viewBox` explicitly in the source.
+
+User CSS is appended as a `<style id="map-colouriser-style">` element just before the closing `</svg>`; the original file isn't modified at request time.
 
 ## Credits
 

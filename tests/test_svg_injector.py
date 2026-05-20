@@ -1,47 +1,34 @@
 import logging
 
-import pytest
-
-from app.svg_injector import MARKER, add_viewbox_if_missing, inject_css, validate_svg
+from app.svg_injector import add_viewbox_if_missing, validate_svg
 
 
 class TestValidateSvg:
-    def test_returns_true_when_marker_present_exactly_once(self):
-        svg = f"<svg><style>{MARKER}</style></svg>"
+    def test_returns_true_for_minimal_svg(self):
+        assert validate_svg('<svg xmlns="http://www.w3.org/2000/svg"/>') is True
+
+    def test_returns_true_for_svg_with_children(self):
+        svg = '<svg xmlns="http://www.w3.org/2000/svg"><path/><style></style></svg>'
         assert validate_svg(svg) is True
 
-    def test_returns_false_when_marker_absent(self):
-        assert validate_svg("<svg><style></style></svg>") is False
+    def test_returns_true_without_namespace(self):
+        # ElementTree accepts <svg> without xmlns; the root tag matches.
+        assert validate_svg("<svg></svg>") is True
 
-    def test_returns_false_when_marker_present_more_than_once(self):
-        svg = f"<svg><style>{MARKER}\n{MARKER}</style></svg>"
-        assert validate_svg(svg) is False
+    def test_returns_false_for_empty_string(self):
+        assert validate_svg("") is False
 
+    def test_returns_false_for_arbitrary_text(self):
+        assert validate_svg("not an svg") is False
 
-class TestInjectCss:
-    def test_replaces_marker_with_css(self):
-        svg = f"<svg><style>{MARKER}</style></svg>"
-        out = inject_css(svg, ".se { fill: red; }")
-        assert ".se { fill: red; }" in out
-        assert MARKER not in out
+    def test_returns_false_for_non_svg_root(self):
+        assert validate_svg("<html><body/></html>") is False
 
-    def test_preserves_surrounding_content(self):
-        svg = f"<svg><style>before\n{MARKER}\nafter</style><path/></svg>"
-        out = inject_css(svg, ".se { fill: red; }")
-        assert "before" in out
-        assert "after" in out
-        assert "<path/>" in out
+    def test_returns_false_for_truncated_svg(self):
+        assert validate_svg('<svg xmlns="http://www.w3.org/2000/svg"><path') is False
 
-    def test_raises_valueerror_when_marker_absent(self):
-        with pytest.raises(ValueError, match="marker"):
-            inject_css("<svg></svg>", ".se { fill: red; }")
-
-    def test_replaces_all_occurrences_when_multiple_present(self):
-        # If a malformed file has two markers, validate_svg already rejected
-        # it; inject still replaces all for robustness rather than partially.
-        svg = f"<svg>{MARKER} A {MARKER}</svg>"
-        out = inject_css(svg, "X")
-        assert MARKER not in out
+    def test_returns_false_for_malformed_xml(self):
+        assert validate_svg("<svg><unclosed></svg>") is False
 
 
 class TestAddViewboxIfMissing:

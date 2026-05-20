@@ -36,4 +36,4 @@ jobs:
 
       - name: SVG marker check
         if: always()
-        run: uv run python scripts/check_svg_marker.py
+        run: uv run python scripts/check_svg.py
