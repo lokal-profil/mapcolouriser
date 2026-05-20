@@ -4,8 +4,8 @@ from app.svg_injector import add_viewbox_if_missing, validate_svg
 
 
 class TestValidateSvg:
-    def test_returns_true_for_minimal_svg(self):
-        assert validate_svg('<svg xmlns="http://www.w3.org/2000/svg"/>') is True
+    def test_returns_true_for_minimal_svg_with_close_tag(self):
+        assert validate_svg('<svg xmlns="http://www.w3.org/2000/svg"></svg>') is True
 
     def test_returns_true_for_svg_with_children(self):
         svg = '<svg xmlns="http://www.w3.org/2000/svg"><path/><style></style></svg>'
@@ -14,6 +14,11 @@ class TestValidateSvg:
     def test_returns_true_without_namespace(self):
         # ElementTree accepts <svg> without xmlns; the root tag matches.
         assert validate_svg("<svg></svg>") is True
+
+    def test_returns_false_for_self_closing_root(self):
+        # Parses fine as XML, but there's no </svg> for the CSS-injection
+        # split to anchor on, so we reject it here rather than later.
+        assert validate_svg('<svg xmlns="http://www.w3.org/2000/svg"/>') is False
 
     def test_returns_false_for_empty_string(self):
         assert validate_svg("") is False
@@ -29,6 +34,11 @@ class TestValidateSvg:
 
     def test_returns_false_for_malformed_xml(self):
         assert validate_svg("<svg><unclosed></svg>") is False
+
+    def test_logs_parse_error_message(self, caplog):
+        with caplog.at_level(logging.WARNING, logger="app.svg_injector"):
+            validate_svg("<svg><unclosed></svg>")
+        assert any("failed to parse" in rec.message for rec in caplog.records)
 
 
 class TestAddViewboxIfMissing:

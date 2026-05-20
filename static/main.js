@@ -26,7 +26,8 @@
     let palette = [];
     try {
         palette = JSON.parse(form.dataset.defaultColours || "[]");
-    } catch {
+    } catch (err) {
+        console.warn("map-colouriser: failed to parse default colour palette", err);
         palette = [];
     }
 
@@ -34,6 +35,9 @@
     let livePreviewEnabled = document.documentElement.classList.contains("live-preview");
     let userStyleEl = null;
     let updateTimer = null;
+    // Gates the Download SVG button — true only once initMap has fetched and
+    // parsed the base map. Stays false on fetch/parse failure.
+    let mapLoaded = false;
     // Captured from the fetched SVG so the Blob download keeps the same XML
     // declaration the server-side download includes.
     let xmlDeclaration = "";
@@ -84,7 +88,7 @@
         const empty = groupsContainer.querySelectorAll(".group").length === 0;
         const submitBtn = form.querySelector('button[type="submit"]');
         if (submitBtn) submitBtn.disabled = empty;
-        if (downloadBtn) downloadBtn.disabled = empty;
+        if (downloadBtn) downloadBtn.disabled = empty || !mapLoaded;
     }
 
     function getGroupState() {
@@ -110,9 +114,9 @@
                 // titles is form.checkValidity() before Blob download.
                 const safeTitle = g.title.replace(/\*\//g, "* /");
                 const selector = g.codes.map(c => `.${c}`).join(", ");
-                return `/* ${safeTitle} */\n${selector} { fill: ${g.colour}; }`;
+                return `\n/* ${safeTitle} */\n${selector} { fill: ${g.colour}; }\n`;
             })
-            .join("\n\n");
+            .join("");
     }
 
     function buildLegend(state) {
@@ -136,33 +140,44 @@
                 if (declMatch) xmlDeclaration = declMatch[0];
                 const doc = new DOMParser().parseFromString(svgText, "image/svg+xml");
                 const svg = doc.documentElement;
+                // DOMParser doesn't throw on malformed XML; it returns a
+                // document whose root is <parsererror>. Detect and rethrow so
+                // the catch handler below renders a useful message.
+                if (svg.nodeName === "parsererror" || svg.getElementsByTagName("parsererror").length) {
+                    throw new Error("base map SVG failed to parse");
+                }
                 previewContainer.replaceChildren(svg);
                 userStyleEl = document.createElementNS("http://www.w3.org/2000/svg", "style");
                 userStyleEl.id = "map-colouriser-style";
                 svg.appendChild(userStyleEl);
+                mapLoaded = true;
                 refreshOutputs();
+                updateActionState();
             })
             .catch(err => {
-                previewContainer.textContent = `Preview unavailable (${err.message}).`;
+                console.error("map-colouriser: failed to load base map", err);
+                previewContainer.textContent =
+                    `Preview unavailable (${err.message}). Try reloading the page, or submit the form to render server-side.`;
             });
     }
 
-    function rebuildPreview() {
+    function rebuildPreview(state) {
         if (!livePreviewEnabled || !userStyleEl) return;
-        userStyleEl.textContent = buildCss(getGroupState());
+        userStyleEl.textContent = buildCss(state);
     }
 
-    function rebuildLegend() {
+    function rebuildLegend(state) {
         if (!livePreviewEnabled || !legendOutput) return;
-        const legend = buildLegend(getGroupState());
+        const legend = buildLegend(state);
         legendOutput.value = legend;
         // Grow with content; floor at 2 so the textarea is visible when empty.
         legendOutput.rows = Math.max(2, legend ? legend.split("\n").length : 0);
     }
 
     function refreshOutputs() {
-        rebuildPreview();
-        rebuildLegend();
+        const state = getGroupState();
+        rebuildPreview(state);
+        rebuildLegend(state);
     }
 
     function requestUpdate() {
@@ -183,8 +198,7 @@
             form.reportValidity();
             return;
         }
-        const svg = previewContainer && previewContainer.querySelector("svg");
-        if (!svg) return;
+        const svg = previewContainer.querySelector("svg");
         const body = new XMLSerializer().serializeToString(svg);
         const xml = xmlDeclaration ? `${xmlDeclaration}\n${body}` : body;
         const blob = new Blob([xml], { type: "image/svg+xml;charset=utf-8" });
@@ -220,15 +234,18 @@
     }
     if (copyBtn && legendOutput) {
         copyBtn.addEventListener("click", async () => {
+            const original = copyBtn.textContent;
             try {
                 await navigator.clipboard.writeText(legendOutput.value);
-                const original = copyBtn.textContent;
                 copyBtn.textContent = "Copied!";
                 setTimeout(() => { copyBtn.textContent = original; }, 1000);
-            } catch {
+            } catch (err) {
                 // Insecure context or permission denied — fall back to selecting
-                // the text so the user can copy manually.
+                // the text so the user can copy manually with Ctrl+C.
+                console.warn("map-colouriser: clipboard write failed, falling back to selection", err);
                 legendOutput.select();
+                copyBtn.textContent = "Copy failed";
+                setTimeout(() => { copyBtn.textContent = original; }, 2000);
             }
         });
     }

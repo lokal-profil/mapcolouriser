@@ -40,7 +40,12 @@ def load_map(key: str = DEFAULT_MAP) -> str:
 
 @cache
 def _prepared(key: str) -> tuple[str, str]:
-    """Return ``(prefix, suffix)`` of the prepared SVG, split around ``</svg>``."""
+    """Return ``(prefix, suffix)`` split immediately before the final ``</svg>``.
+
+    The closing tag is included in ``suffix``; callers concatenate
+    ``prefix + new_content + suffix`` without re-adding it. ``validate_svg``
+    guarantees ``</svg>`` is present, so the ``rfind`` cannot return ``-1``.
+    """
     svg = add_viewbox_if_missing(load_map(key))
     if not validate_svg(svg):
         raise RuntimeError(f"base map {key!r} is not a well-formed SVG")
@@ -49,7 +54,12 @@ def _prepared(key: str) -> tuple[str, str]:
 
 
 def render_map(key: str, css: str) -> str:
-    """Return the registered map with ``css`` injected as a ``<style>`` element."""
+    """Return the registered map with ``css`` injected as a ``<style>`` element.
+
+    Caller must ensure ``css`` contains no ``</style>`` or ``</svg>`` substring;
+    ``app.colouriser.build_css`` satisfies this because ``Group`` validation
+    rejects ``<``, ``>``, ``/``, ``*`` and ``\\`` in titles.
+    """
     prefix, suffix = _prepared(key)
     return f'{prefix}<style id="map-colouriser-style">{css}</style>{suffix}'
 

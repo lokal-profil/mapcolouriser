@@ -22,16 +22,21 @@ _SVG_NS = "http://www.w3.org/2000/svg"
 
 
 def validate_svg(svg_text: str) -> bool:
-    """Return True iff the text parses as XML rooted at ``<svg>``.
+    """Return True iff ``svg_text`` is a well-formed SVG with a ``</svg>`` close tag.
 
-    Catches truncated, malformed, or non-SVG files before they reach
-    request handling or the JS preview.
+    The close-tag requirement excludes self-closing roots (``<svg/>``) so
+    downstream callers like ``app.maps._prepared`` can safely locate the
+    final ``</svg>`` for CSS injection. Catches truncated, malformed, or
+    non-SVG files before they reach request handling or the JS preview.
     """
     try:
         root = ElementTree.fromstring(svg_text)
-    except ElementTree.ParseError:
+    except ElementTree.ParseError as exc:
+        logger.warning("SVG failed to parse as XML: %s", exc)
         return False
-    return root.tag in ("svg", f"{{{_SVG_NS}}}svg")
+    if root.tag not in ("svg", f"{{{_SVG_NS}}}svg"):
+        return False
+    return "</svg>" in svg_text
 
 
 def add_viewbox_if_missing(svg_text: str) -> str:

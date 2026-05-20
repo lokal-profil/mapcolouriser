@@ -63,10 +63,11 @@ def build_css(groups: list[Group]) -> str:
     """Render groups as a CSS snippet matching the SVG's class names.
 
     Each group becomes one ``/* title */`` comment followed by a single rule
-    selecting all of its countries.
+    selecting all of its countries. Each block is wrapped in newlines so the
+    snippet sits cleanly on its own lines inside a ``<style>`` element.
     """
     blocks: list[str] = []
     for group in groups:
         selector = ", ".join(f".{code}" for code in group.country_codes)
-        blocks.append(f"/* {group.title} */\n{selector} {{ fill: {group.colour}; }}")
-    return "\n\n".join(blocks)
+        blocks.append(f"\n/* {group.title} */\n{selector} {{ fill: {group.colour}; }}\n")
+    return "".join(blocks)

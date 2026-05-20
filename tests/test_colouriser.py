@@ -87,6 +87,13 @@ class TestBuildCss:
         # A defensible alternative to raising; pin behaviour with a test.
         assert build_css([]) == ""
 
+    def test_non_empty_output_is_wrapped_in_newlines(self):
+        # The wrap lets render_map place the snippet on its own lines inside
+        # <style>...</style> without each call site re-adding the padding.
+        css = build_css([Group(title="X", colour="#ff0000", country_codes=["se"])])
+        assert css.startswith("\n")
+        assert css.endswith("\n")
+
     def test_group_order_is_preserved(self):
         css = build_css(
             [

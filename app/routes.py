@@ -40,6 +40,7 @@ _SESSION_LAST_GROUPS = "last_groups"
 
 @bp.get("/")
 def index() -> str:
+    session_map_key = session.get(_SESSION_MAP_KEY, DEFAULT_MAP)
     return render_template(
         "index.html",
         countries=all_countries(),
@@ -47,7 +48,7 @@ def index() -> str:
         errors=[],
         title_pattern=TITLE_PATTERN,
         default_colours=DEFAULT_GROUP_COLOURS,
-        map_key=session.get(_SESSION_MAP_KEY, DEFAULT_MAP),
+        map_key=session_map_key if session_map_key in MAPS else DEFAULT_MAP,
     )
 
 
