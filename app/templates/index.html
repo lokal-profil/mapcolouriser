@@ -52,7 +52,10 @@
 
             <div class="actions">
                 <button type="button" id="add-group">+ Add group</button>
-                <button type="submit" class="js-fallback">Generate map</button>
+                <button type="submit" id="generate-map" class="js-fallback">Generate map</button>
+                <button type="submit" id="reset-groups"
+                        formaction="{{ url_for('main.reset') }}"
+                        formnovalidate>Reset</button>
             </div>
         </form>
 

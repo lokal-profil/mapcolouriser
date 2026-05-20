@@ -118,8 +118,8 @@ export function createApp(doc = document) {
 
     function updateActionState() {
         const empty = groupsContainer.querySelectorAll(".group").length === 0;
-        const submitBtn = form.querySelector('button[type="submit"]');
-        if (submitBtn) submitBtn.disabled = empty;
+        const generateBtn = doc.getElementById("generate-map");
+        if (generateBtn) generateBtn.disabled = empty;
         if (downloadBtn) downloadBtn.disabled = empty || !mapLoaded;
     }
 
@@ -261,11 +261,23 @@ export function createApp(doc = document) {
         }
 
         form.addEventListener("submit", e => {
-            // Live preview swallows Enter-key submissions on the form (the submit
-            // button itself is CSS-hidden in that mode); explicit Download SVG
+            // Reset always passes through — it's the user's deliberate "start
+            // over" action and posts to /reset, not /generate. Otherwise live
+            // preview swallows Enter-key and Generate-map submissions (the
+            // submit button is CSS-hidden in that mode); explicit Download SVG
             // click remains the only way to download.
+            if (e.submitter && e.submitter.id === "reset-groups") return;
             if (livePreviewEnabled) e.preventDefault();
         });
+
+        const resetBtn = doc.getElementById("reset-groups");
+        if (resetBtn) {
+            resetBtn.addEventListener("click", e => {
+                if (!confirm("Reset all groups? Your current selections will be cleared.")) {
+                    e.preventDefault();
+                }
+            });
+        }
 
         updateActionState();
         initMap(mapKey);

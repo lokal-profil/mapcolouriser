@@ -19,7 +19,8 @@ const FIXTURE_HTML = `<!doctype html>
           data-default-colours='${JSON.stringify(PALETTE)}'
           data-map-key="world">
         <div id="groups"></div>
-        <button type="submit" class="js-fallback">Generate map</button>
+        <button type="submit" id="generate-map" class="js-fallback">Generate map</button>
+        <button type="submit" id="reset-groups" formaction="/reset" formnovalidate>Reset</button>
     </form>
     <button id="add-group">+ Add group</button>
     <template id="group-template">
@@ -316,6 +317,72 @@ describe("createApp", () => {
             const evt = new Event("submit", { bubbles: true, cancelable: true });
             form.dispatchEvent(evt);
             expect(evt.defaultPrevented).toBe(false);
+        });
+
+        it("allows a submit triggered by the reset button even when live preview is on", async () => {
+            const app = createApp();
+            app.init();
+            await flushMicrotasks();
+
+            const form = document.getElementById("colouriser-form");
+            const resetBtn = document.getElementById("reset-groups");
+            // SubmitEvent isn't reliably exposed in jsdom; fake it on a plain Event.
+            const evt = new Event("submit", { bubbles: true, cancelable: true });
+            Object.defineProperty(evt, "submitter", { value: resetBtn });
+            form.dispatchEvent(evt);
+            // Submit handler must NOT preventDefault on reset.
+            expect(evt.defaultPrevented).toBe(false);
+        });
+    });
+
+    describe("reset button", () => {
+        it("prevents the click (and therefore the submit) when confirm() is cancelled", async () => {
+            const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
+            const app = createApp();
+            app.init();
+            await flushMicrotasks();
+
+            const resetBtn = document.getElementById("reset-groups");
+            const clickEvt = new MouseEvent("click", { bubbles: true, cancelable: true });
+            resetBtn.dispatchEvent(clickEvt);
+
+            expect(confirmSpy).toHaveBeenCalledOnce();
+            expect(clickEvt.defaultPrevented).toBe(true);
+        });
+
+        it("lets the click through when confirm() is accepted", async () => {
+            vi.spyOn(window, "confirm").mockReturnValue(true);
+
+            const app = createApp();
+            app.init();
+            await flushMicrotasks();
+
+            const resetBtn = document.getElementById("reset-groups");
+            // The production click handler is attached to the element directly,
+            // so flipping the type prevents jsdom's submit-activation (which
+            // logs an unrelated "requestSubmit not implemented" warning) while
+            // leaving the listener under test intact.
+            resetBtn.type = "button";
+            const clickEvt = new MouseEvent("click", { bubbles: true, cancelable: true });
+            resetBtn.dispatchEvent(clickEvt);
+            resetBtn.type = "submit";
+
+            // Click is NOT prevented — the native submit-to-formaction would proceed.
+            expect(clickEvt.defaultPrevented).toBe(false);
+        });
+    });
+
+    describe("updateActionState button gating", () => {
+        it("disables only #generate-map (not #reset-groups) when no groups remain", () => {
+            const app = createApp();
+            app.addGroup();
+            // Start with at least one group → Generate enabled
+            expect(document.getElementById("generate-map").disabled).toBe(false);
+
+            // Remove the only group → Generate disabled, Reset stays enabled
+            app.removeGroup(document.querySelector(".group"));
+            expect(document.getElementById("generate-map").disabled).toBe(true);
+            expect(document.getElementById("reset-groups").disabled).toBe(false);
         });
     });
 

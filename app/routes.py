@@ -9,9 +9,11 @@ from flask import (
     Blueprint,
     Response,
     current_app,
+    redirect,
     render_template,
     request,
     session,
+    url_for,
 )
 
 from app.colouriser import (
@@ -76,6 +78,14 @@ def generate() -> Response | str:
     session[_SESSION_LAST_GROUPS] = raw_groups
 
     return render_template("result.html", svg=svg)
+
+
+@bp.post("/reset")
+def reset() -> Response:
+    """Clear stored form state and send the user back to a fresh form."""
+    session.pop(_SESSION_LAST_GROUPS, None)
+    session.pop(_SESSION_MAP_KEY, None)
+    return redirect(url_for("main.index"))
 
 
 @bp.get("/maps/<key>.svg")

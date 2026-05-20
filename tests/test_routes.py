@@ -199,6 +199,43 @@ class TestBaseMapEndpoint:
         assert "max-age" in resp.headers.get("Cache-Control", "")
 
 
+_SAMPLE_SESSION_GROUPS = [
+    {"index": 0, "title": "Members", "colour": "#ff0000", "countries": ["se"]},
+]
+
+
+class TestReset:
+    def test_clears_session_and_redirects_to_index(self, client):
+        with client.session_transaction() as s:
+            s["last_groups"] = _SAMPLE_SESSION_GROUPS
+            s["map_key"] = "world"
+
+        resp = client.post("/reset")
+        assert resp.status_code == 302
+        assert resp.headers["Location"].endswith("/")
+
+        with client.session_transaction() as s:
+            assert "last_groups" not in s
+            assert "map_key" not in s
+
+    def test_index_after_reset_shows_default_form_state(self, client):
+        with client.session_transaction() as s:
+            s["last_groups"] = _SAMPLE_SESSION_GROUPS
+
+        client.post("/reset")
+        body = client.get("/").get_data(as_text=True)
+        # No carryover of the prior title.
+        assert "Members" not in body
+        # Two empty default groups present.
+        assert body.count('name="group[0][title]"') == 1
+        assert body.count('name="group[1][title]"') == 1
+
+    def test_reset_is_idempotent_when_session_empty(self, client):
+        # No session set up — reset should still succeed.
+        resp = client.post("/reset")
+        assert resp.status_code == 302
+
+
 class TestDownload:
     def test_returns_400_when_no_session(self, client):
         resp = client.get("/download")
