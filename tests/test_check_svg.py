@@ -9,6 +9,7 @@ from __future__ import annotations
 import pytest
 
 import app.maps as maps_module
+from app.maps import MapInfo
 from scripts import check_svg
 
 
@@ -32,8 +33,9 @@ def test_malformed_svg_exits_nonzero(monkeypatch, tmp_path, capsys):
     bad.write_text("<svg><unclosed></svg>")  # malformed XML
 
     monkeypatch.setattr(maps_module, "STATIC_DIR", tmp_path)
-    monkeypatch.setattr(maps_module, "MAPS", {"bad": "bad.svg"})
-    monkeypatch.setattr(check_svg, "MAPS", {"bad": "bad.svg"})
+    bad_map = {"bad": MapInfo(filename="bad.svg", label="bad")}
+    monkeypatch.setattr(maps_module, "MAPS", bad_map)
+    monkeypatch.setattr(check_svg, "MAPS", bad_map)
 
     rc = check_svg.main()
     assert rc == 1
@@ -44,8 +46,9 @@ def test_malformed_svg_exits_nonzero(monkeypatch, tmp_path, capsys):
 
 def test_missing_file_exits_nonzero(monkeypatch, tmp_path, capsys):
     monkeypatch.setattr(maps_module, "STATIC_DIR", tmp_path)
-    monkeypatch.setattr(maps_module, "MAPS", {"absent": "missing.svg"})
-    monkeypatch.setattr(check_svg, "MAPS", {"absent": "missing.svg"})
+    absent_map = {"absent": MapInfo(filename="missing.svg", label="absent")}
+    monkeypatch.setattr(maps_module, "MAPS", absent_map)
+    monkeypatch.setattr(check_svg, "MAPS", absent_map)
 
     rc = check_svg.main()
     assert rc == 1

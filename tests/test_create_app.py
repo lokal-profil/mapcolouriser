@@ -6,6 +6,7 @@ import pytest
 
 import app.maps as maps_module
 from app import create_app
+from app.maps import MapInfo
 
 
 @pytest.fixture(autouse=True)
@@ -22,7 +23,7 @@ def test_raises_when_base_map_is_not_well_formed_svg(monkeypatch, tmp_path):
     bad.write_text("<svg><unclosed></svg>")  # malformed XML
 
     monkeypatch.setattr(maps_module, "STATIC_DIR", tmp_path)
-    monkeypatch.setattr(maps_module, "MAPS", {"bad": "bad.svg"})
+    monkeypatch.setattr(maps_module, "MAPS", {"bad": MapInfo(filename="bad.svg", label="bad")})
 
     with pytest.raises(RuntimeError, match="well-formed SVG"):
         create_app(secret_key="test-secret")
@@ -33,7 +34,7 @@ def test_raises_when_base_map_is_not_an_svg(monkeypatch, tmp_path):
     bad.write_text("<html><body/></html>")
 
     monkeypatch.setattr(maps_module, "STATIC_DIR", tmp_path)
-    monkeypatch.setattr(maps_module, "MAPS", {"bad": "bad.svg"})
+    monkeypatch.setattr(maps_module, "MAPS", {"bad": MapInfo(filename="bad.svg", label="bad")})
 
     with pytest.raises(RuntimeError, match="well-formed SVG"):
         create_app(secret_key="test-secret")
@@ -41,7 +42,8 @@ def test_raises_when_base_map_is_not_an_svg(monkeypatch, tmp_path):
 
 def test_raises_when_base_map_file_missing(monkeypatch, tmp_path):
     monkeypatch.setattr(maps_module, "STATIC_DIR", tmp_path)
-    monkeypatch.setattr(maps_module, "MAPS", {"absent": "missing.svg"})
+    absent_map = {"absent": MapInfo(filename="missing.svg", label="absent")}
+    monkeypatch.setattr(maps_module, "MAPS", absent_map)
 
     with pytest.raises(FileNotFoundError):
         create_app(secret_key="test-secret")

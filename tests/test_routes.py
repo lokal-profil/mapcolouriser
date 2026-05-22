@@ -64,6 +64,23 @@ class TestIndex:
         assert "#332288" in body
         assert "#AA4499" in body  # last colour, sanity check the full list ships
 
+    def test_advanced_settings_renders_map_selector(self, client):
+        body = client.get("/").get_data(as_text=True)
+        assert '<details class="advanced-settings"' in body
+        assert '<select name="map"' in body
+        assert 'form="colouriser-form"' in body
+        # Both registered maps appear by label.
+        assert ">World</option>" in body
+        assert ">World (compact)</option>" in body
+        # Default key marked selected.
+        assert 'value="world" selected' in body
+
+    def test_advanced_settings_reflects_session_map_key(self, client):
+        with client.session_transaction() as s:
+            s["map_key"] = "world-compact"
+        body = client.get("/").get_data(as_text=True)
+        assert 'value="world-compact" selected' in body
+
 
 class TestGenerate:
     def test_valid_post_renders_inline_svg(self, client):
@@ -81,6 +98,34 @@ class TestGenerate:
         assert "#ff0000" in body
         # User CSS appended as a <style id="map-colouriser-style"> element.
         assert '<style id="map-colouriser-style">' in body
+
+    def test_post_with_compact_map_succeeds_and_persists_in_session(self, client):
+        resp = client.post(
+            "/generate",
+            data={
+                "group[0][title]": "Members",
+                "group[0][colour]": "#ff0000",
+                "group[0][countries][]": ["se"],
+                "map": "world-compact",
+            },
+        )
+        assert resp.status_code == 200
+        with client.session_transaction() as s:
+            assert s["map_key"] == "world-compact"
+
+    def test_post_with_unknown_map_rerenders_with_error(self, client):
+        resp = client.post(
+            "/generate",
+            data={
+                "group[0][title]": "Members",
+                "group[0][colour]": "#ff0000",
+                "group[0][countries][]": ["se"],
+                "map": "atlantis",
+            },
+        )
+        assert resp.status_code == 200
+        body = resp.get_data(as_text=True)
+        assert "Unknown map" in body
 
     def test_invalid_colour_rerenders_form_with_error(self, client):
         resp = client.post(

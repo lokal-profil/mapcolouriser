@@ -46,15 +46,18 @@ pnpm test
 ## Adding a new base map
 
 1. Drop a well-formed SVG in `static/`.
-2. Add an entry to `MAPS` in `app/maps.py` (internal key → on-disk filename).
+2. Add an entry to `MAPS` in `app/maps.py` — internal key → `MapInfo(filename, label)`. The label is shown in the "Advanced" base-map selector.
 3. Country paths must carry the lowercase ISO 3166-1 alpha-2 code as a CSS class.
 4. If the SVG lacks a `viewBox`, one is derived from its `width`/`height` at render time so the preview scales on small screens. To control the crop yourself, set `viewBox` explicitly in the source.
+
+When two or more maps are registered, the index page renders an "Advanced" `<details>` in the page header containing a `<select name="map">`. With a single map registered, the selector is hidden.
 
 User CSS is appended as a `<style id="map-colouriser-style">` element just before the closing `</svg>`; the original file isn't modified at request time.
 
 ## Credits
 
 - [`BlankMap-World.svg`](https://commons.wikimedia.org/wiki/File:BlankMap-World.svg) by Canuckguy, et al. — public domain.
+- [`BlankMap-World-Compact.svg`](https://commons.wikimedia.org/wiki/File:BlankMap-World-Compact.svg) by Canuckguy, et al. — public domain.
 - Default group colours from the [Tol "Muted" qualitative palette](https://sronpersonalpages.nl/~pault/) by Paul Tol (SRON) — colour-blind safe.
 
 ## AI assistance disclosure

@@ -20,21 +20,21 @@ from app.svg_injector import validate_svg  # noqa: E402
 
 def main() -> int:
     failed = False
-    for key, filename in MAPS.items():
+    for key, info in MAPS.items():
         try:
             svg_text = load_map(key)
         except (OSError, UnicodeDecodeError) as e:
-            print(f"FAIL {key} ({filename}): {e}", file=sys.stderr)
+            print(f"FAIL {key} ({info.filename}): {e}", file=sys.stderr)
             failed = True
             continue
         if not validate_svg(svg_text):
             print(
-                f"FAIL {key} ({filename}): not a well-formed SVG",
+                f"FAIL {key} ({info.filename}): not a well-formed SVG",
                 file=sys.stderr,
             )
             failed = True
             continue
-        print(f"OK   {key} ({filename})")
+        print(f"OK   {key} ({info.filename})")
     return 1 if failed else 0
 
 

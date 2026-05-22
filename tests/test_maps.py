@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import dataclasses
+
 import pytest
 
 import app.maps as maps_module
 from app.maps import (
     MAPS,
+    MapInfo,
     load_map,
     map_path,
     prepared_svg,
@@ -96,3 +99,20 @@ class TestPrimeCaches:
         assert maps_module._prepared.cache_info().currsize == 0
         prime_caches()
         assert maps_module._prepared.cache_info().currsize == len(MAPS)
+
+
+class TestMapsRegistry:
+    def test_world_entry_has_expected_filename_and_label(self):
+        info = MAPS["world"]
+        assert isinstance(info, MapInfo)
+        assert info.filename == "BlankMap-World.svg"
+        assert info.label == "World"
+
+    def test_world_compact_entry_present(self):
+        info = MAPS["world-compact"]
+        assert info.filename == "BlankMap-World-Compact.svg"
+        assert info.label == "World (compact)"
+
+    def test_map_info_is_frozen(self):
+        with pytest.raises(dataclasses.FrozenInstanceError):
+            MAPS["world"].filename = "tampered.svg"

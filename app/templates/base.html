@@ -40,7 +40,11 @@
         .actions { display: flex; gap: 0.5rem; margin-top: 1rem; align-items: center; flex-wrap: wrap; }
         .preview { border: 1px solid #ccc; padding: 0.5rem; margin-top: 1rem; }
         .preview svg { display: block; width: 100%; height: auto; max-height: 80vh; max-width: 100%; }
-        .live-preview-toggle { display: inline-flex; gap: 0.3rem; align-items: center; margin-left: auto; cursor: pointer; }
+        .header-actions { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
+        .advanced-settings summary { cursor: pointer; }
+        .advanced-settings[open] { padding: 0.25rem 0.5rem; border: 1px solid #ccc; border-radius: 4px; }
+        .advanced-settings label { display: inline-flex; gap: 0.4rem; align-items: center; margin-top: 0.3rem; }
+        .live-preview-toggle { display: inline-flex; gap: 0.3rem; align-items: center; cursor: pointer; }
         /* Visually replaced by .switch, but the input itself stays a 1×1 hit
            area (not zero-size) so screen readers, automation tools, and
            visibility heuristics still treat it as a real, reachable control. */

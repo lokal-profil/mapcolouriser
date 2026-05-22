@@ -51,6 +51,7 @@ def index() -> str:
         title_pattern=TITLE_PATTERN,
         default_colours=DEFAULT_GROUP_COLOURS,
         map_key=session_map_key if session_map_key in MAPS else DEFAULT_MAP,
+        maps=MAPS,
     )
 
 
@@ -69,6 +70,7 @@ def generate() -> Response | str:
             title_pattern=TITLE_PATTERN,
             default_colours=DEFAULT_GROUP_COLOURS,
             map_key=map_key if map_key in MAPS else DEFAULT_MAP,
+            maps=MAPS,
         )
 
     groups = _build_groups(raw_groups)

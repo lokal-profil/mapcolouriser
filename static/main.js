@@ -45,6 +45,8 @@ export function createApp(doc = document) {
     const downloadBtn = doc.getElementById("download-svg");
     const legendOutput = doc.getElementById("legend-output");
     const copyBtn = doc.getElementById("copy-legend");
+    // Optional — only rendered when more than one base map is registered.
+    const mapSelect = doc.getElementById("base-map-select");
 
     if (!form || !groupsContainer || !addBtn || !tmpl) {
         // Unreachable in production (the template ships all four IDs). Logged
@@ -63,7 +65,11 @@ export function createApp(doc = document) {
         palette = [];
     }
 
-    const mapKey = form.dataset.mapKey || "world";
+    // The selector (when present) is the canonical source — its `selected`
+    // option mirrors the server-rendered map_key from session. The form's
+    // data-map-key is only the fallback when no selector exists (single-map
+    // registry case).
+    let mapKey = mapSelect ? mapSelect.value : (form.dataset.mapKey || "world");
     let livePreviewEnabled = doc.documentElement.classList.contains("live-preview");
     let userStyleEl = null;
     let updateTimer = null;
@@ -253,6 +259,16 @@ export function createApp(doc = document) {
         }
         if (downloadBtn) {
             downloadBtn.addEventListener("click", downloadSvg);
+        }
+        if (mapSelect) {
+            mapSelect.addEventListener("change", e => {
+                mapKey = e.target.value;
+                // Disable the download button until the new base SVG loads —
+                // initMap re-sets mapLoaded=true on success.
+                mapLoaded = false;
+                updateActionState();
+                initMap(mapKey);
+            });
         }
         if (copyBtn && legendOutput) {
             copyBtn.addEventListener("click", async () => {

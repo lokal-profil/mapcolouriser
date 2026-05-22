@@ -23,6 +23,10 @@ const FIXTURE_HTML = `<!doctype html>
         <button type="submit" id="reset-groups" formaction="/reset" formnovalidate>Reset</button>
     </form>
     <button id="add-group">+ Add group</button>
+    <select id="base-map-select" name="map" form="colouriser-form">
+        <option value="world" selected>World</option>
+        <option value="world-compact">World (compact)</option>
+    </select>
     <template id="group-template">
         <div class="group" data-index="__INDEX__">
             <input name="group[__INDEX__][title]" type="text" />
@@ -250,9 +254,10 @@ describe("createApp", () => {
         it("enables the download button and wires the style element after a successful load", async () => {
             const app = createApp();
             app.addGroup();
-            // Pre-select a code so the initial refreshOutputs that initMap fires
-            // at the end of its success path produces a real fill rule.
-            document.querySelector('option[value="se"]').selected = true;
+            // Pre-select a country code so the initial refreshOutputs that initMap fires
+            // at the end of its success path produces a real fill rule. Use a select
+            // inside #groups to disambiguate from the base-map selector's options.
+            document.querySelector('#groups option[value="se"]').selected = true;
             await app.initMap("world");
 
             const downloadBtn = document.getElementById("download-svg");
@@ -268,6 +273,33 @@ describe("createApp", () => {
             // Content reflects the selected code (verifies the cross-document
             // doc.createElementNS binding works end-to-end).
             expect(styleEl.textContent).toMatch(/\.se \{ fill: #/);
+        });
+    });
+
+    describe("base map selector", () => {
+        it("re-fetches and gates the download button on selector change", async () => {
+            const app = createApp();
+            app.init();  // wires the change listener
+            // Add a group so updateActionState's "no groups → disable" branch
+            // isn't what gates the download button — we want to observe the
+            // mapLoaded-driven gating specifically.
+            app.addGroup();
+            await flushMicrotasks();  // initial initMap settles, mapLoaded=true
+            expect(document.getElementById("download-svg").disabled).toBe(false);
+
+            // Switch to the compact map.
+            const mapSelect = document.getElementById("base-map-select");
+            mapSelect.value = "world-compact";
+            mapSelect.dispatchEvent(new Event("change", { bubbles: true }));
+
+            // The change handler resets mapLoaded synchronously before the
+            // fetch resolves — download must be disabled in this interim.
+            expect(document.getElementById("download-svg").disabled).toBe(true);
+            expect(globalThis.fetch).toHaveBeenLastCalledWith("/maps/world-compact.svg");
+
+            // After the fetch settles, mapLoaded flips true and download re-enables.
+            await flushMicrotasks();
+            expect(document.getElementById("download-svg").disabled).toBe(false);
         });
     });
 

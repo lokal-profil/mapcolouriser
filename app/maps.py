@@ -12,6 +12,7 @@ just before the close, matching the client-side preview's approach.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from functools import cache
 from pathlib import Path
 
@@ -19,8 +20,18 @@ from app.svg_injector import add_viewbox_if_missing, validate_svg
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 
-MAPS: dict[str, str] = {
-    "world": "BlankMap-World.svg",
+
+@dataclass(frozen=True, slots=True)
+class MapInfo:
+    """Per-registered-map metadata. ``label`` is shown in the selector UI."""
+
+    filename: str
+    label: str
+
+
+MAPS: dict[str, MapInfo] = {
+    "world": MapInfo(filename="BlankMap-World.svg", label="World"),
+    "world-compact": MapInfo(filename="BlankMap-World-Compact.svg", label="World (compact)"),
 }
 
 DEFAULT_MAP = "world"
@@ -30,7 +41,7 @@ def map_path(key: str = DEFAULT_MAP) -> Path:
     """Return the on-disk path for a registered map. Raises KeyError if unknown."""
     if key not in MAPS:
         raise KeyError(f"unknown map key: {key!r}")
-    return STATIC_DIR / MAPS[key]
+    return STATIC_DIR / MAPS[key].filename
 
 
 def load_map(key: str = DEFAULT_MAP) -> str:
