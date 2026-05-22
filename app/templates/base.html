@@ -110,7 +110,14 @@
 </head>
 <body>
     <header class="page-header">
-        <h1>Map Colouriser</h1>
+        {#
+            "Colouriser" letters use the AA-large-passing subset of
+            DEFAULT_GROUP_COLOURS (app/colouriser.py): indigo, green, olive,
+            rose, wine, purple. Cyan, teal, and sand are intentionally skipped
+            because they fail WCAG contrast on white. If the palette in
+            colouriser.py changes, update these spans deliberately.
+        #}
+        <h1>Map <span style="color:#332288">C</span><span style="color:#117733">o</span><span style="color:#999933">l</span><span style="color:#CC6677">o</span><span style="color:#882255">u</span><span style="color:#AA4499">r</span><span style="color:#332288">i</span><span style="color:#117733">s</span><span style="color:#999933">e</span><span style="color:#CC6677">r</span></h1>
         {% block header_actions %}{% endblock %}
     </header>
     {% block content %}{% endblock %}
