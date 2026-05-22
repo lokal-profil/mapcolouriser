@@ -5,12 +5,31 @@
     <title>{% block title %}Map Colouriser{% endblock %}</title>
     <script>
         // Set classes before body renders to avoid flashing the no-JS layout
-        // before main.js loads (FOUC prevention).
-        document.documentElement.classList.add("js-enabled", "live-preview");
+        // before main.js loads (FOUC prevention). The live-preview class also
+        // drives the toggle's visual position (see CSS below), so we read the
+        // saved preference here too so first paint matches what main.js will
+        // pick up.
+        document.documentElement.classList.add("js-enabled");
+        try {
+            if (localStorage.getItem("mapcolouriser:live-preview") !== "0") {
+                document.documentElement.classList.add("live-preview");
+            }
+        } catch (err) {
+            // Storage unavailable (privacy mode, file://): default to on.
+            document.documentElement.classList.add("live-preview");
+        }
     </script>
     <style>
         body { font-family: system-ui, sans-serif; max-width: 960px; margin: 2rem auto; padding: 0 1rem; }
         h1 { margin-top: 0; }
+        .page-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+        .page-header h1 { margin: 0; }
         .group { border: 1px solid #ccc; border-radius: 4px; padding: 1rem; margin-bottom: 1rem; }
         .group-row { display: flex; gap: 0.5rem; margin-bottom: 0.5rem; flex-wrap: wrap; }
         .group-row label { display: flex; flex-direction: column; flex: 1; min-width: 12rem; }
@@ -52,9 +71,13 @@
             border-radius: 50%;
             transition: transform 0.15s;
         }
-        /* Wikimedia Codex `background-color-progressive`. */
-        .live-preview-toggle input[type="checkbox"]:checked ~ .switch { background: #36c; }
-        .live-preview-toggle input[type="checkbox"]:checked ~ .switch::after { transform: translateX(1rem); }
+        /* Wikimedia Codex `background-color-progressive`. The switch visual is
+           driven by the html.live-preview class (not the input's :checked
+           pseudo-class) so the inline FOUC script in <head> can set the
+           first-paint state atomically — the input element isn't in the DOM
+           yet when that script runs. main.js syncs input.checked to match. */
+        html.live-preview .live-preview-toggle .switch { background: #36c; }
+        html.live-preview .live-preview-toggle .switch::after { transform: translateX(1rem); }
         .live-preview-toggle input[type="checkbox"]:focus-visible ~ .switch {
             outline: 2px solid #66f;
             outline-offset: 2px;
@@ -86,7 +109,10 @@
     </style>
 </head>
 <body>
-    <h1>Map Colouriser</h1>
+    <header class="page-header">
+        <h1>Map Colouriser</h1>
+        {% block header_actions %}{% endblock %}
+    </header>
     {% block content %}{% endblock %}
     {% block scripts %}{% endblock %}
 </body>

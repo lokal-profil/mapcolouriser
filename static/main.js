@@ -198,6 +198,14 @@ export function createApp(doc = document) {
     function setLivePreviewEnabled(enabled) {
         livePreviewEnabled = enabled;
         doc.documentElement.classList.toggle("live-preview", enabled);
+        // Persist the preference so it survives reload, generate-then-back,
+        // and the next visit. Wrapped because localStorage can throw in
+        // privacy modes / file:// origins.
+        try {
+            localStorage.setItem("mapcolouriser:live-preview", enabled ? "1" : "0");
+        } catch (err) {
+            console.warn("map-colouriser: failed to persist live-preview preference", err);
+        }
         if (enabled) refreshOutputs();
         updateActionState();
     }
@@ -237,6 +245,10 @@ export function createApp(doc = document) {
         form.addEventListener("change", requestUpdate);
 
         if (toggleInput) {
+            // Sync the checkbox to the FOUC-set html class — the hardcoded
+            // `checked` HTML attribute may not match a stored "off" preference
+            // because the inline <head> script runs before <body> parses.
+            toggleInput.checked = livePreviewEnabled;
             toggleInput.addEventListener("change", e => setLivePreviewEnabled(e.target.checked));
         }
         if (downloadBtn) {

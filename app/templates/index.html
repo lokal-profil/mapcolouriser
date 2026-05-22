@@ -1,4 +1,11 @@
 {% extends "base.html" %}
+{% block header_actions %}
+    <label class="live-preview-toggle js-only">
+        <input type="checkbox" id="toggle-live-preview" checked />
+        Live preview
+        <span class="switch" aria-hidden="true"></span>
+    </label>
+{% endblock %}
 {% block content %}
     {% if errors %}
         <div class="errors" role="alert">
@@ -63,11 +70,6 @@
             <div id="map-preview" class="preview"></div>
             <div class="actions">
                 <button type="button" id="download-svg" class="js-live">Download SVG</button>
-                <label class="live-preview-toggle js-only">
-                    <input type="checkbox" id="toggle-live-preview" checked />
-                    Live preview
-                    <span class="switch" aria-hidden="true"></span>
-                </label>
             </div>
             <details id="legend-box">
                 <summary>Wikitext legend</summary>

@@ -137,6 +137,7 @@ describe("createApp", () => {
         vi.useRealTimers();
         vi.restoreAllMocks();
         delete globalThis.fetch;
+        localStorage.clear();
     });
 
     describe("addGroup", () => {
@@ -267,6 +268,40 @@ describe("createApp", () => {
             // Content reflects the selected code (verifies the cross-document
             // doc.createElementNS binding works end-to-end).
             expect(styleEl.textContent).toMatch(/\.se \{ fill: #/);
+        });
+    });
+
+    describe("live-preview persistence", () => {
+        it("writes the preference to localStorage on every change", () => {
+            const app = createApp();
+            app.setLivePreviewEnabled(false);
+            expect(localStorage.getItem("mapcolouriser:live-preview")).toBe("0");
+            app.setLivePreviewEnabled(true);
+            expect(localStorage.getItem("mapcolouriser:live-preview")).toBe("1");
+        });
+
+        it("syncs the checkbox to the FOUC-set html class on init", async () => {
+            // Simulate a stored "off" preference: the inline FOUC script
+            // would have skipped adding the live-preview class. The hardcoded
+            // checked attribute in the input must not lie about the state.
+            document.documentElement.classList.remove("live-preview");
+
+            const app = createApp();
+            app.init();
+            await flushMicrotasks();
+
+            expect(document.getElementById("toggle-live-preview").checked).toBe(false);
+        });
+
+        it("does not throw when localStorage access fails", () => {
+            const spy = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+                throw new Error("QuotaExceeded");
+            });
+            vi.spyOn(console, "warn").mockImplementation(() => {});
+
+            const app = createApp();
+            expect(() => app.setLivePreviewEnabled(false)).not.toThrow();
+            expect(spy).toHaveBeenCalled();
         });
     });
 
