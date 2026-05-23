@@ -50,7 +50,7 @@ pnpm test
 3. Country paths must carry the lowercase ISO 3166-1 alpha-2 code as a CSS class.
 4. If the SVG lacks a `viewBox`, one is derived from its `width`/`height` at render time so the preview scales on small screens. To control the crop yourself, set `viewBox` explicitly in the source.
 
-When two or more maps are registered, the index page renders an "Advanced" `<details>` in the page header containing a `<select name="map">`. With a single map registered, the selector is hidden.
+When two or more maps are registered, the index page renders an "Advanced" `<details>` in the page header containing a `<select name="map">`. With a single map registered, the selector is omitted from the rendered page entirely.
 
 User CSS is appended as a `<style id="map-colouriser-style">` element just before the closing `</svg>`; the original file isn't modified at request time.
 

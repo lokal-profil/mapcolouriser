@@ -58,7 +58,7 @@ def index() -> str:
 @bp.post("/generate")
 def generate() -> Response | str:
     raw_groups = _parse_groups(request.form)
-    map_key = request.form.get("map", DEFAULT_MAP)
+    map_key = request.form.get("map") or DEFAULT_MAP
     errors = _validate(raw_groups, map_key)
 
     if errors:

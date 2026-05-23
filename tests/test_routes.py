@@ -127,6 +127,22 @@ class TestGenerate:
         body = resp.get_data(as_text=True)
         assert "Unknown map" in body
 
+    def test_post_with_empty_map_falls_back_to_default(self, client):
+        resp = client.post(
+            "/generate",
+            data={
+                "group[0][title]": "Members",
+                "group[0][colour]": "#ff0000",
+                "group[0][countries][]": ["se"],
+                "map": "",
+            },
+        )
+        assert resp.status_code == 200
+        body = resp.get_data(as_text=True)
+        assert "Unknown map" not in body
+        with client.session_transaction() as s:
+            assert s["map_key"] == "world"
+
     def test_invalid_colour_rerenders_form_with_error(self, client):
         resp = client.post(
             "/generate",

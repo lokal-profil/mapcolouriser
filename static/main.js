@@ -76,6 +76,10 @@ export function createApp(doc = document) {
     // Gates the Download SVG button — true only once initMap has fetched and
     // parsed the base map. Stays false on fetch/parse failure.
     let mapLoaded = false;
+    // Monotonic counter so overlapping initMap calls (rapid selector clicks)
+    // can detect and silently drop stale in-flight handlers. Without this,
+    // an older fetch resolving second would overwrite the newer preview.
+    let mapRequestSeq = 0;
     // Captured from the fetched SVG so the Blob download keeps the same XML
     // declaration the server-side download includes.
     let xmlDeclaration = "";
@@ -145,12 +149,16 @@ export function createApp(doc = document) {
 
     function initMap(key) {
         if (!previewContainer) return Promise.resolve();
+        const myReq = ++mapRequestSeq;
         return fetch(`/maps/${key}.svg`)
             .then(r => {
                 if (!r.ok) throw new Error(`HTTP ${r.status}`);
                 return r.text();
             })
             .then(svgText => {
+                // A newer initMap has been issued — drop this stale result so
+                // it doesn't overwrite the newer preview.
+                if (myReq !== mapRequestSeq) return;
                 const declMatch = svgText.match(/^<\?xml[^?]*\?>/);
                 if (declMatch) xmlDeclaration = declMatch[0];
                 const parsedDoc = new DOMParser().parseFromString(svgText, "image/svg+xml");
@@ -170,6 +178,9 @@ export function createApp(doc = document) {
                 updateActionState();
             })
             .catch(err => {
+                // Likewise drop stale errors — the newer fetch will surface
+                // its own success or failure.
+                if (myReq !== mapRequestSeq) return;
                 console.error("map-colouriser: failed to load base map", err);
                 previewContainer.textContent =
                     `Preview unavailable (${err.message}). Try reloading the page, or submit the form to render server-side.`;
