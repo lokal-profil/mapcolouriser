@@ -8,7 +8,7 @@
                 Base map
                 <select name="map" id="base-map-select" form="colouriser-form">
                     {% for key, info in maps.items() %}
-                        <option value="{{ key }}"{% if key == map_key %} selected{% endif %}>{{ info.label }}</option>
+                        <option value="{{ key }}"{% if key == map_key %} selected{% endif %}{% if info.description %} title="{{ info.description }}"{% endif %}>{{ info.label }}</option>
                     {% endfor %}
                 </select>
             </label>

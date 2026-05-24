@@ -116,3 +116,9 @@ class TestMapsRegistry:
     def test_map_info_is_frozen(self):
         with pytest.raises(dataclasses.FrozenInstanceError):
             MAPS["world"].filename = "tampered.svg"
+
+    def test_map_info_rejects_positional_args(self):
+        # kw_only=True — positional construction must fail so a future field
+        # addition can't silently rebind argument positions.
+        with pytest.raises(TypeError):
+            MapInfo("x.svg", "X")  # type: ignore[misc]

@@ -21,17 +21,34 @@ from app.svg_injector import add_viewbox_if_missing, validate_svg
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, kw_only=True)
 class MapInfo:
-    """Per-registered-map metadata. ``label`` is shown in the selector UI."""
+    """Per-registered-map metadata.
+
+    ``filename`` is the on-disk SVG name in ``static/``; ``label`` is the
+    selector option text; ``description`` (when set) renders as a ``title``
+    tooltip on the option.
+    """
 
     filename: str
     label: str
+    description: str = ""
 
 
 MAPS: dict[str, MapInfo] = {
-    "world": MapInfo(filename="BlankMap-World.svg", label="World"),
-    "world-compact": MapInfo(filename="BlankMap-World-Compact.svg", label="World (compact)"),
+    "world": MapInfo(
+        filename="BlankMap-World.svg",
+        label="World",
+        description="A Robinson projection centered on the 0th meridian.",
+    ),
+    "world-compact": MapInfo(
+        filename="BlankMap-World-Compact.svg",
+        label="World (compact)",
+        description=(
+            "A compact Robinson projection centered on the 0th meridian"
+            " with Antarctica removed."
+        ),
+    ),
 }
 
 DEFAULT_MAP = "world"

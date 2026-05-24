@@ -75,6 +75,39 @@ class TestIndex:
         # Default key marked selected.
         assert 'value="world" selected' in body
 
+    def test_option_with_description_renders_title_tooltip(self, client, monkeypatch):
+        import app.maps as maps_module
+        from app.maps import MapInfo
+
+        sentinel = "TOOLTIP-SENTINEL-12345"
+        monkeypatch.setitem(maps_module.MAPS, "world", MapInfo(
+            filename="BlankMap-World.svg",
+            label="World",
+            description=sentinel,
+        ))
+
+        body = client.get("/").get_data(as_text=True)
+        assert f'title="{sentinel}"' in body
+
+    def test_option_without_description_has_no_title_attr(self, client, monkeypatch):
+        import re
+
+        import app.maps as maps_module
+        from app.maps import MapInfo
+
+        monkeypatch.setitem(maps_module.MAPS, "world-compact", MapInfo(
+            filename="BlankMap-World-Compact.svg",
+            label="World (compact)",
+            description="",
+        ))
+
+        body = client.get("/").get_data(as_text=True)
+        match = re.search(r'<option value="world-compact"[^>]*>', body)
+        assert match is not None, "world-compact option missing from rendered page"
+        assert "title=" not in match.group(0), (
+            f"expected no title attr on description-less option, got: {match.group(0)!r}"
+        )
+
     def test_advanced_settings_reflects_session_map_key(self, client):
         with client.session_transaction() as s:
             s["map_key"] = "world-compact"
