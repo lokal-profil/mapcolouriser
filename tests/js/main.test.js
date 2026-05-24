@@ -276,6 +276,25 @@ describe("createApp", () => {
         });
     });
 
+    describe("loading placeholder", () => {
+        it("installs a loading placeholder in #map-preview while the fetch is in flight", async () => {
+            let resolveFetch;
+            globalThis.fetch = vi.fn(() => new Promise(resolve => { resolveFetch = resolve; }));
+
+            const app = createApp();
+            const inFlight = app.initMap("world");
+
+            const preview = document.getElementById("map-preview");
+            expect(preview.querySelector(".map-loading")).not.toBeNull();
+            expect(preview.textContent).toMatch(/Loading map/);
+            expect(preview.textContent).toMatch(/Turn off the live preview/);
+
+            // Let the fetch resolve so the promise chain settles cleanly.
+            resolveFetch({ ok: true, status: 200, text: () => Promise.resolve(FAKE_SVG) });
+            await inFlight;
+        });
+    });
+
     describe("base map selector", () => {
         it("re-fetches and gates the download button on selector change", async () => {
             const app = createApp();

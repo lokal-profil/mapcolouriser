@@ -147,9 +147,21 @@ export function createApp(doc = document) {
         });
     }
 
+    function showLoadingPlaceholder() {
+        const wrap = doc.createElement("div");
+        wrap.className = "map-loading";
+        wrap.append("Loading map…");
+        const hint = doc.createElement("p");
+        hint.className = "map-loading-hint";
+        hint.textContent = "Taking too long? Turn off the live preview toggle.";
+        wrap.appendChild(hint);
+        previewContainer.replaceChildren(wrap);
+    }
+
     function initMap(key) {
         if (!previewContainer) return Promise.resolve();
         const myReq = ++mapRequestSeq;
+        showLoadingPlaceholder();
         return fetch(`/maps/${key}.svg`)
             .then(r => {
                 if (!r.ok) throw new Error(`HTTP ${r.status}`);
