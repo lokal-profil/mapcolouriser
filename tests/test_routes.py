@@ -253,6 +253,23 @@ class TestGenerate:
         with client.session_transaction() as s:
             assert s["include_circles"] is True
 
+    def test_post_with_circles_falsy_value_does_not_enable_circles(self, client):
+        # Programmatic clients sending `circles=0` (or any value other than
+        # "1") must NOT enable circles — guards against the previous
+        # presence-only check that accepted `circles=0` as truthy.
+        resp = client.post(
+            "/generate",
+            data={
+                "group[0][title]": "Members",
+                "group[0][colour]": "#ff0000",
+                "group[0][countries][]": ["se"],
+                "circles": "0",
+            },
+        )
+        assert resp.status_code == 200
+        with client.session_transaction() as s:
+            assert s["include_circles"] is False
+
     def test_post_without_circles_field_omits_opacity(self, client):
         import re
 

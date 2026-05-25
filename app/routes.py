@@ -62,7 +62,7 @@ def index() -> str:
 def generate() -> Response | str:
     raw_groups = _parse_groups(request.form)
     map_key = request.form.get("map") or DEFAULT_MAP
-    include_circles = "circles" in request.form
+    include_circles = request.form.get("circles") == "1"
     errors = _validate(raw_groups, map_key)
 
     if errors:
