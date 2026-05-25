@@ -45,8 +45,7 @@ MAPS: dict[str, MapInfo] = {
         filename="BlankMap-World-Compact.svg",
         label="World (compact)",
         description=(
-            "A compact Robinson projection centered on the 0th meridian"
-            " with Antarctica removed."
+            "A compact Robinson projection centered on the 0th meridian with Antarctica removed."
         ),
     ),
 }

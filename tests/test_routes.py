@@ -80,17 +80,22 @@ class TestIndex:
         from app.maps import MapInfo
 
         sentinel = "TOOLTIP-SENTINEL-12345"
-        monkeypatch.setitem(maps_module.MAPS, "world", MapInfo(
-            filename="BlankMap-World.svg",
-            label="World",
-            description=sentinel,
-        ))
+        monkeypatch.setitem(
+            maps_module.MAPS,
+            "world",
+            MapInfo(
+                filename="BlankMap-World.svg",
+                label="World",
+                description=sentinel,
+            ),
+        )
 
         body = client.get("/").get_data(as_text=True)
         assert f'title="{sentinel}"' in body
 
     def test_advanced_settings_present_even_with_single_map(self, client, monkeypatch):
         import app.maps as maps_module
+
         # Mutate the shared dict in place — routes.py aliases the same
         # object via `from app.maps import MAPS`, so setattr won't reach it
         # but delitem does (and monkeypatch restores).
@@ -109,6 +114,7 @@ class TestIndex:
         assert 'form="colouriser-form"' in body
         # Default state: unchecked.
         import re
+
         m = re.search(r'<input[^>]*id="toggle-circles"[^>]*>', body)
         assert m and "checked" not in m.group(0)
 
@@ -117,6 +123,7 @@ class TestIndex:
             s["include_circles"] = True
         body = client.get("/").get_data(as_text=True)
         import re
+
         m = re.search(r'<input[^>]*id="toggle-circles"[^>]*>', body)
         assert m and "checked" in m.group(0)
 
@@ -126,11 +133,15 @@ class TestIndex:
         import app.maps as maps_module
         from app.maps import MapInfo
 
-        monkeypatch.setitem(maps_module.MAPS, "world-compact", MapInfo(
-            filename="BlankMap-World-Compact.svg",
-            label="World (compact)",
-            description="",
-        ))
+        monkeypatch.setitem(
+            maps_module.MAPS,
+            "world-compact",
+            MapInfo(
+                filename="BlankMap-World-Compact.svg",
+                label="World (compact)",
+                description="",
+            ),
+        )
 
         body = client.get("/").get_data(as_text=True)
         match = re.search(r'<option value="world-compact"[^>]*>', body)
@@ -209,6 +220,7 @@ class TestGenerate:
 
     def test_post_with_circles_checked_persists_and_adds_opacity(self, client):
         import re
+
         resp = client.post(
             "/generate",
             data={
@@ -230,6 +242,7 @@ class TestGenerate:
 
     def test_post_without_circles_field_omits_opacity(self, client):
         import re
+
         resp = client.post(
             "/generate",
             data={

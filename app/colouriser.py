@@ -74,7 +74,5 @@ def build_css(groups: list[Group], include_small_country_circles: bool = False) 
     extra = " opacity: 1;" if include_small_country_circles else ""
     for group in groups:
         selector = ", ".join(f".{code}" for code in group.country_codes)
-        blocks.append(
-            f"\n/* {group.title} */\n{selector} {{ fill: {group.colour};{extra} }}\n"
-        )
+        blocks.append(f"\n/* {group.title} */\n{selector} {{ fill: {group.colour};{extra} }}\n")
     return "".join(blocks)
