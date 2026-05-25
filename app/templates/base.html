@@ -6,9 +6,8 @@
     <script>
         // Set classes before body renders to avoid flashing the no-JS layout
         // before main.js loads (FOUC prevention). The live-preview class also
-        // drives the toggle's visual position (see CSS below), so we read the
-        // saved preference here too so first paint matches what main.js will
-        // pick up.
+        // drives the toggle's visual position, so we read the saved preference
+        // here too so the initial state matches what main.js will pick up.
         document.documentElement.classList.add("js-enabled");
         try {
             if (localStorage.getItem("mapcolouriser:live-preview") !== "0") {

@@ -98,10 +98,9 @@ button { cursor: pointer; padding: 0.4rem 0.8rem; }
 }
 /* On-state — Wikimedia Codex `background-color-progressive`. The live-
    preview toggle is driven by html.live-preview (set by the inline
-   FOUC script in <head>) so first paint matches the stored preference
-   atomically — the input element isn't in the DOM yet when that
-   script runs. main.js syncs input.checked to match. The circles
-   toggle is a normal :checked-driven switch. */
+   FOUC script in <head>) so the toggle's visual state matches the
+   stored preference from first paint. main.js syncs input.checked
+   to match. The circles toggle is a normal :checked-driven switch. */
 html.live-preview .live-preview-toggle .switch { background: #36c; }
 html.live-preview .live-preview-toggle .switch::after { transform: translateX(1rem); }
 .circles-toggle input[type="checkbox"]:checked ~ .switch { background: #36c; }
@@ -130,7 +129,7 @@ html.live-preview .live-preview-toggle .switch::after { transform: translateX(1r
 
 /* Progressive enhancement: hide JS-only affordances when JS is off,
    and swap between live-preview and fallback flows via a class on
-   <html> (set above to avoid FOUC). */
+   <html>. */
 html:not(.js-enabled) .js-only { display: none; }
 html:not(.js-enabled) .preview-pane { display: none; }
 html:not(.live-preview) #map-preview,
