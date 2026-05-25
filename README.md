@@ -1,4 +1,4 @@
-# mapcolouriser
+# Map Colouriser
 
 A small Flask web app that colours regions on a hardcoded SVG world map by user-defined groups, with a live in-browser preview and SVG download. JavaScript-disabled clients get a server-rendered result page as a fallback. Targets Wikimedia Toolforge (Python 3.11).
 
@@ -8,7 +8,10 @@ A small Flask web app that colours regions on a hardcoded SVG world map by user-
 - Native HTML5 colour picker with a colour-blind-safe default palette.
 - Client-side SVG download via Blob — no round-trip to the server.
 - JavaScript-disabled fallback: server-rendered result page with the same download.
-- Toggle live preview on/off (accessibility / weak-device opt-out).
+- Multiple base maps with a selector behind the "Advanced" disclosure.
+- Optional small-country circles toggle (visible effect on compatible base maps).
+- Reset button to clear all groups and stored preferences.
+- Preferences persisted across sessions — live-preview toggle in localStorage; last-used map and groups in the Flask session.
 
 ## Quick start
 
@@ -19,17 +22,16 @@ uv run flask --app app run --debug
 
 Open <http://127.0.0.1:5000>.
 
-## Tests, lint, marker check
+## Tests, lint, SVG validation
 
 ```bash
 uv run pytest
 uv run ruff check
+uv run ruff format --check
 uv run python scripts/check_svg.py
 ```
 
-JS tests for the live-preview / download / legend pipeline use Vitest + jsdom.
-Managed via pnpm (pinned in `package.json`'s `packageManager` field; `corepack
-enable` lets your Node install run it transparently):
+JS tests for the live-preview / download / legend pipeline use Vitest + jsdom. Managed via pnpm (pinned in `package.json`'s `packageManager` field; `corepack enable` lets your Node install run it transparently):
 
 ```bash
 pnpm install   # one-time, dev-only — the Flask app itself has no Node dep
@@ -38,21 +40,21 @@ pnpm test
 
 ## Layout
 
-- `app/` — Flask app (factory, routes, pure helpers)
-- `static/` — base map(s); see `app/maps.py` for the registry
+- `app/` — Flask app (factory, routes, pure helpers, Jinja templates)
+- `static/` — base map SVGs (see `app/maps.py` for the registry), `main.js`, `main.css`
 - `scripts/check_svg.py` — CI-side SVG validation
-- `tests/` — pytest suite
+- `tests/` — pytest suite (Python); `tests/js/` for the Vitest suite
+- `package.json`, `vitest.config.js` — dev-only Node toolchain for JS tests
 
 ## Adding a new base map
 
-1. Drop a well-formed SVG in `static/`.
-2. Add an entry to `MAPS` in `app/maps.py` — internal key → `MapInfo(filename, label)`. The label is shown in the "Advanced" base-map selector.
-3. Country paths must carry the lowercase ISO 3166-1 alpha-2 code as a CSS class.
-4. If the SVG lacks a `viewBox`, one is derived from its `width`/`height` at render time so the preview scales on small screens. To control the crop yourself, set `viewBox` explicitly in the source.
+1. Drop a well-formed SVG in `static/`. Country paths must carry the lowercase ISO 3166-1 alpha-2 code as a CSS class. If the SVG lacks a `viewBox` but has `width`/`height` attributes, one is derived at request time — no manual `viewBox` needed.
+2. Add an entry to `MAPS` in `app/maps.py` — internal key → `MapInfo(filename=..., label=..., description=...)`. The `label` is shown in the "Advanced" base-map selector; the optional `description` becomes the option's hover tooltip.
 
-When two or more maps are registered, the index page renders an "Advanced" `<details>` in the page header containing a `<select name="map">`. With a single map registered, the selector is omitted from the rendered page entirely.
+## Implementation notes
 
-User CSS is appended as a `<style id="map-colouriser-style">` element just before the closing `</svg>`; the original file isn't modified at request time.
+- User CSS is appended as a `<style id="map-colouriser-style">` element just before the closing `</svg>`; the on-disk SVG file is never modified.
+- When only one map is registered, the "Advanced" disclosure shows just the small-country circles toggle (the base-map selector is omitted entirely).
 
 ## Credits
 
@@ -62,7 +64,7 @@ User CSS is appended as a `<style id="map-colouriser-style">` element just befor
 
 ## AI assistance disclosure
 
-This project was built in pair-programming with [Claude Code](https://www.anthropic.com/claude-code) (Anthropic, Opus 4.x) over a single interactive session in May 2026.
+This project was built in pair-programming with [Claude Code](https://www.anthropic.com/claude-code) (Anthropic, Opus 4.x) over interactive sessions.
 
 - **Direction, decisions, and accountability — human.** Library and dependency choices, module layout, naming, what to accept or reject from review feedback, and final approval of every change and commit message.
 - **Code, tests, comments, and most documentation — AI.** Drafted by the assistant; reviewed and edited by the maintainer before being written and verified afterwards.
