@@ -22,6 +22,7 @@ from app.colouriser import (
     TITLE_PATTERN,
     Group,
     build_css,
+    build_legend,
 )
 from app.countries import all_countries
 from app.maps import DEFAULT_MAP, MAPS, prepared_svg, render_map
@@ -79,12 +80,13 @@ def generate() -> Response | str:
 
     groups = _build_groups(raw_groups)
     svg = render_map(map_key, build_css(groups, include_small_country_circles=include_circles))
+    legend = build_legend(groups)
 
     session[_SESSION_MAP_KEY] = map_key
     session[_SESSION_LAST_GROUPS] = raw_groups
     session[_SESSION_INCLUDE_CIRCLES] = include_circles
 
-    return render_template("result.html", svg=svg)
+    return render_template("result.html", svg=svg, legend=legend)
 
 
 @bp.post("/reset")

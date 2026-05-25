@@ -174,6 +174,19 @@ class TestGenerate:
         # User CSS appended as a <style id="map-colouriser-style"> element.
         assert '<style id="map-colouriser-style">' in body
 
+    def test_renders_wikitext_legend_below_map(self, client):
+        resp = client.post(
+            "/generate",
+            data={
+                "group[0][title]": "Members",
+                "group[0][colour]": "#ff0000",
+                "group[0][countries][]": ["se"],
+            },
+        )
+        body = resp.get_data(as_text=True)
+        assert "{{Legend|#ff0000|Members}}" in body
+        assert '<details class="result-legend" open>' in body
+
     def test_post_with_compact_map_succeeds_and_persists_in_session(self, client):
         resp = client.post(
             "/generate",

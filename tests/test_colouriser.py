@@ -1,6 +1,6 @@
 import pytest
 
-from app.colouriser import Group, build_css
+from app.colouriser import Group, build_css, build_legend
 
 
 class TestGroup:
@@ -117,3 +117,21 @@ class TestBuildCss:
         groups = [Group(title="X", colour="#ff0000", country_codes=["se"])]
         css = build_css(groups, include_small_country_circles=True)
         assert ".se { fill: #ff0000; opacity: 1; }" in css
+
+
+class TestBuildLegend:
+    def test_single_group_renders_one_legend_line(self):
+        legend = build_legend([Group(title="Members", colour="#ff0000", country_codes=["se"])])
+        assert legend == "{{Legend|#ff0000|Members}}"
+
+    def test_multiple_groups_are_newline_separated(self):
+        legend = build_legend(
+            [
+                Group(title="A", colour="#ff0000", country_codes=["se"]),
+                Group(title="B", colour="#00ff00", country_codes=["de"]),
+            ]
+        )
+        assert legend == "{{Legend|#ff0000|A}}\n{{Legend|#00ff00|B}}"
+
+    def test_empty_groups_list_returns_empty_string(self):
+        assert build_legend([]) == ""

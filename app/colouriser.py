@@ -76,3 +76,13 @@ def build_css(groups: list[Group], include_small_country_circles: bool = False) 
         selector = ", ".join(f".{code}" for code in group.country_codes)
         blocks.append(f"\n/* {group.title} */\n{selector} {{ fill: {group.colour};{extra} }}\n")
     return "".join(blocks)
+
+
+def build_legend(groups: list[Group]) -> str:
+    """Render groups as Wikitext ``{{Legend|colour|title}}`` lines, one per group.
+
+    Group validation already enforces non-empty title and country codes, so
+    no per-group filtering is needed here (unlike the JS counterpart, which
+    works on raw form state).
+    """
+    return "\n".join(f"{{{{Legend|{group.colour}|{group.title}}}}}" for group in groups)
