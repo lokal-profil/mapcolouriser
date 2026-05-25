@@ -53,7 +53,6 @@ button { cursor: pointer; padding: 0.4rem 0.8rem; }
     border-radius: 4px;
     box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
     z-index: 10;
-    /* Stack the labels vertically inside the panel. */
     display: flex;
     flex-direction: column;
     gap: 0.5rem;

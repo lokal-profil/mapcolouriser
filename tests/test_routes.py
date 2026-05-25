@@ -255,8 +255,7 @@ class TestGenerate:
 
     def test_post_with_circles_falsy_value_does_not_enable_circles(self, client):
         # Programmatic clients sending `circles=0` (or any value other than
-        # "1") must NOT enable circles — guards against the previous
-        # presence-only check that accepted `circles=0` as truthy.
+        # "1") must NOT enable circles.
         resp = client.post(
             "/generate",
             data={
