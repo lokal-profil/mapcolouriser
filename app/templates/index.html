@@ -3,23 +3,25 @@
     <div class="header-actions">
         <details class="advanced-settings">
             <summary>Advanced</summary>
-            {% if maps|length > 1 %}
-            <label>
-                Base map
-                <select name="map" id="base-map-select" form="colouriser-form">
-                    {% for key, info in maps.items() %}
-                        <option value="{{ key }}"{% if key == map_key %} selected{% endif %}{% if info.description %} title="{{ info.description }}"{% endif %}>{{ info.label }}</option>
-                    {% endfor %}
-                </select>
-            </label>
-            {% endif %}
-            <label class="circles-toggle" title="Only takes visible effect on compatible base maps.">
-                <input type="checkbox" name="circles" id="toggle-circles"
-                       form="colouriser-form" value="1"
-                       {% if include_circles %}checked{% endif %} />
-                Show small-country circles
-                <span class="switch" aria-hidden="true"></span>
-            </label>
+            <div class="advanced-settings-panel">
+                {% if maps|length > 1 %}
+                <label>
+                    Base map
+                    <select name="map" id="base-map-select" form="colouriser-form">
+                        {% for key, info in maps.items() %}
+                            <option value="{{ key }}"{% if key == map_key %} selected{% endif %}{% if info.description %} title="{{ info.description }}"{% endif %}>{{ info.label }}</option>
+                        {% endfor %}
+                    </select>
+                </label>
+                {% endif %}
+                <label class="circles-toggle" title="Only takes visible effect on compatible base maps.">
+                    <input type="checkbox" name="circles" id="toggle-circles"
+                           form="colouriser-form" value="1"
+                           {% if include_circles %}checked{% endif %} />
+                    Show small-country circles
+                    <span class="switch" aria-hidden="true"></span>
+                </label>
+            </div>
         </details>
         <label class="live-preview-toggle js-only">
             <input type="checkbox" id="toggle-live-preview" checked />
