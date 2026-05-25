@@ -27,6 +27,7 @@ const FIXTURE_HTML = `<!doctype html>
         <option value="world" selected>World</option>
         <option value="world-compact">World (compact)</option>
     </select>
+    <input type="checkbox" id="toggle-circles" name="circles" form="colouriser-form" value="1" />
     <template id="group-template">
         <div class="group" data-index="__INDEX__">
             <input name="group[__INDEX__][title]" type="text" />
@@ -101,6 +102,19 @@ describe("buildCss", () => {
         const css = buildCss([{ title: "X", colour: "#abcdef", codes: ["se"] }]);
         expect(css.startsWith("\n")).toBe(true);
         expect(css.endsWith("\n")).toBe(true);
+    });
+
+    it("adds opacity: 1 to each rule when includeCircles is true", () => {
+        const css = buildCss(
+            [{ title: "X", colour: "#ff0000", codes: ["se"] }],
+            { includeCircles: true },
+        );
+        expect(css).toContain(".se { fill: #ff0000; opacity: 1; }");
+    });
+
+    it("omits opacity declaration by default", () => {
+        const css = buildCss([{ title: "X", colour: "#ff0000", codes: ["se"] }]);
+        expect(css).not.toContain("opacity");
     });
 });
 
@@ -292,6 +306,26 @@ describe("createApp", () => {
             // Let the fetch resolve so the promise chain settles cleanly.
             resolveFetch({ ok: true, status: 200, text: () => Promise.resolve(FAKE_SVG) });
             await inFlight;
+        });
+    });
+
+    describe("circles toggle", () => {
+        it("includes opacity in the style element when toggled on", async () => {
+            const app = createApp();
+            app.addGroup();
+            // Select a country so the style element produces a real fill rule.
+            document.querySelector('#groups option[value="se"]').selected = true;
+            await app.initMap("world");
+
+            const circles = document.getElementById("toggle-circles");
+            circles.checked = true;
+            // refreshOutputs reads circlesInput.checked directly; call via
+            // setLivePreviewEnabled which fires refreshOutputs synchronously
+            // and bypasses the 250ms requestUpdate debounce.
+            app.setLivePreviewEnabled(true);
+
+            const styleEl = document.getElementById("map-colouriser-style");
+            expect(styleEl.textContent).toMatch(/\.se \{ fill: #[^;]+; opacity: 1; \}/);
         });
     });
 

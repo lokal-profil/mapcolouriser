@@ -102,3 +102,18 @@ class TestBuildCss:
             ]
         )
         assert css.index("/* Alpha */") < css.index("/* Beta */")
+
+    def test_default_omits_opacity_declaration(self):
+        groups = [Group(title="X", colour="#ff0000", country_codes=["se"])]
+        css = build_css(groups)
+        assert "opacity" not in css
+
+    def test_include_small_country_circles_false_omits_opacity_declaration(self):
+        groups = [Group(title="X", colour="#ff0000", country_codes=["se"])]
+        css = build_css(groups, include_small_country_circles=False)
+        assert "opacity" not in css
+
+    def test_include_small_country_circles_true_adds_opacity_declaration(self):
+        groups = [Group(title="X", colour="#ff0000", country_codes=["se"])]
+        css = build_css(groups, include_small_country_circles=True)
+        assert ".se { fill: #ff0000; opacity: 1; }" in css

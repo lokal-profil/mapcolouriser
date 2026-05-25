@@ -53,19 +53,22 @@
         .header-actions { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
         .advanced-settings summary { cursor: pointer; }
         .advanced-settings[open] { padding: 0.25rem 0.5rem; border: 1px solid #ccc; border-radius: 4px; }
-        .advanced-settings label { display: inline-flex; gap: 0.4rem; align-items: center; margin-top: 0.3rem; }
+        .advanced-settings label { display: flex; gap: 0.4rem; align-items: center; margin-top: 0.3rem; }
         .live-preview-toggle { display: inline-flex; gap: 0.3rem; align-items: center; cursor: pointer; }
+        .circles-toggle { cursor: pointer; }
         /* Visually replaced by .switch, but the input itself stays a 1×1 hit
            area (not zero-size) so screen readers, automation tools, and
            visibility heuristics still treat it as a real, reachable control. */
-        .live-preview-toggle input[type="checkbox"] {
+        .live-preview-toggle input[type="checkbox"],
+        .circles-toggle input[type="checkbox"] {
             position: absolute;
             opacity: 0;
             width: 1px;
             height: 1px;
             margin: 0;
         }
-        .live-preview-toggle .switch {
+        /* Switch geometry — shared by every toggle that uses the .switch span. */
+        .switch {
             display: inline-block;
             width: 2.2rem;
             height: 1.2rem;
@@ -74,7 +77,7 @@
             position: relative;
             transition: background 0.15s;
         }
-        .live-preview-toggle .switch::after {
+        .switch::after {
             content: "";
             position: absolute;
             top: 0.1rem;
@@ -85,14 +88,18 @@
             border-radius: 50%;
             transition: transform 0.15s;
         }
-        /* Wikimedia Codex `background-color-progressive`. The switch visual is
-           driven by the html.live-preview class (not the input's :checked
-           pseudo-class) so the inline FOUC script in <head> can set the
-           first-paint state atomically — the input element isn't in the DOM
-           yet when that script runs. main.js syncs input.checked to match. */
+        /* On-state — Wikimedia Codex `background-color-progressive`. The live-
+           preview toggle is driven by html.live-preview (set by the inline
+           FOUC script in <head>) so first paint matches the stored preference
+           atomically — the input element isn't in the DOM yet when that
+           script runs. main.js syncs input.checked to match. The circles
+           toggle is a normal :checked-driven switch. */
         html.live-preview .live-preview-toggle .switch { background: #36c; }
         html.live-preview .live-preview-toggle .switch::after { transform: translateX(1rem); }
-        .live-preview-toggle input[type="checkbox"]:focus-visible ~ .switch {
+        .circles-toggle input[type="checkbox"]:checked ~ .switch { background: #36c; }
+        .circles-toggle input[type="checkbox"]:checked ~ .switch::after { transform: translateX(1rem); }
+        .live-preview-toggle input[type="checkbox"]:focus-visible ~ .switch,
+        .circles-toggle input[type="checkbox"]:focus-visible ~ .switch {
             outline: 2px solid #66f;
             outline-offset: 2px;
         }

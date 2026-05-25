@@ -38,6 +38,7 @@ _VALID_CODES = frozenset(code for _, code in all_countries())
 
 _SESSION_MAP_KEY = "map_key"
 _SESSION_LAST_GROUPS = "last_groups"
+_SESSION_INCLUDE_CIRCLES = "include_circles"
 
 
 @bp.get("/")
@@ -52,6 +53,7 @@ def index() -> str:
         default_colours=DEFAULT_GROUP_COLOURS,
         map_key=session_map_key if session_map_key in MAPS else DEFAULT_MAP,
         maps=MAPS,
+        include_circles=bool(session.get(_SESSION_INCLUDE_CIRCLES, False)),
     )
 
 
@@ -59,6 +61,7 @@ def index() -> str:
 def generate() -> Response | str:
     raw_groups = _parse_groups(request.form)
     map_key = request.form.get("map") or DEFAULT_MAP
+    include_circles = "circles" in request.form
     errors = _validate(raw_groups, map_key)
 
     if errors:
@@ -71,13 +74,15 @@ def generate() -> Response | str:
             default_colours=DEFAULT_GROUP_COLOURS,
             map_key=map_key if map_key in MAPS else DEFAULT_MAP,
             maps=MAPS,
+            include_circles=include_circles,
         )
 
     groups = _build_groups(raw_groups)
-    svg = render_map(map_key, build_css(groups))
+    svg = render_map(map_key, build_css(groups, include_small_country_circles=include_circles))
 
     session[_SESSION_MAP_KEY] = map_key
     session[_SESSION_LAST_GROUPS] = raw_groups
+    session[_SESSION_INCLUDE_CIRCLES] = include_circles
 
     return render_template("result.html", svg=svg)
 
@@ -87,6 +92,7 @@ def reset() -> Response:
     """Clear stored form state and send the user back to a fresh form."""
     session.pop(_SESSION_LAST_GROUPS, None)
     session.pop(_SESSION_MAP_KEY, None)
+    session.pop(_SESSION_INCLUDE_CIRCLES, None)
     return redirect(url_for("main.index"))
 
 
@@ -105,6 +111,7 @@ def base_map(key: str) -> Response:
 def download() -> Response:
     raw_groups = session.get(_SESSION_LAST_GROUPS)
     map_key = session.get(_SESSION_MAP_KEY, DEFAULT_MAP)
+    include_circles = bool(session.get(_SESSION_INCLUDE_CIRCLES, False))
     if not raw_groups:
         return Response("No generated map in session.", status=400)
 
@@ -114,7 +121,7 @@ def download() -> Response:
 
     try:
         groups = _build_groups(raw_groups)
-        svg = render_map(map_key, build_css(groups))
+        svg = render_map(map_key, build_css(groups, include_small_country_circles=include_circles))
     except (KeyError, ValueError, TypeError):
         current_app.logger.exception("download: invalid session data")
         return Response("Stored map data is invalid; please regenerate.", status=400)

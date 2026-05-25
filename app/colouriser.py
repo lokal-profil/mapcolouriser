@@ -59,15 +59,22 @@ class Group:
             raise ValueError(f"group {self.title!r} has duplicate country codes")
 
 
-def build_css(groups: list[Group]) -> str:
+def build_css(groups: list[Group], include_small_country_circles: bool = False) -> str:
     """Render groups as a CSS snippet matching the SVG's class names.
 
     Each group becomes one ``/* title */`` comment followed by a single rule
     selecting all of its countries. Each block is wrapped in newlines so the
     snippet sits cleanly on its own lines inside a ``<style>`` element.
+
+    When ``include_small_country_circles`` is True, each rule also sets
+    ``opacity: 1`` so the small-country circles in compatible base maps
+    become visible alongside their country fills.
     """
     blocks: list[str] = []
+    extra = " opacity: 1;" if include_small_country_circles else ""
     for group in groups:
         selector = ", ".join(f".{code}" for code in group.country_codes)
-        blocks.append(f"\n/* {group.title} */\n{selector} {{ fill: {group.colour}; }}\n")
+        blocks.append(
+            f"\n/* {group.title} */\n{selector} {{ fill: {group.colour};{extra} }}\n"
+        )
     return "".join(blocks)

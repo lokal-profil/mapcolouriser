@@ -1,9 +1,9 @@
 {% extends "base.html" %}
 {% block header_actions %}
     <div class="header-actions">
-        {% if maps|length > 1 %}
         <details class="advanced-settings">
             <summary>Advanced</summary>
+            {% if maps|length > 1 %}
             <label>
                 Base map
                 <select name="map" id="base-map-select" form="colouriser-form">
@@ -12,8 +12,15 @@
                     {% endfor %}
                 </select>
             </label>
+            {% endif %}
+            <label class="circles-toggle" title="Only takes visible effect on compatible base maps.">
+                <input type="checkbox" name="circles" id="toggle-circles"
+                       form="colouriser-form" value="1"
+                       {% if include_circles %}checked{% endif %} />
+                Show small-country circles
+                <span class="switch" aria-hidden="true"></span>
+            </label>
         </details>
-        {% endif %}
         <label class="live-preview-toggle js-only">
             <input type="checkbox" id="toggle-live-preview" checked />
             Live preview

@@ -12,7 +12,7 @@
 // and calls `createApp().init()`. Tests import the pure helpers and the
 // factory directly without triggering DOM side effects.
 
-export function buildCss(state) {
+export function buildCss(state, { includeCircles = false } = {}) {
     return state
         .filter(g => g.codes.length > 0)
         .map(g => {
@@ -21,7 +21,10 @@ export function buildCss(state) {
             // titles is form.checkValidity() before Blob download.
             const safeTitle = g.title.replace(/\*\//g, "* /");
             const selector = g.codes.map(c => `.${c}`).join(", ");
-            return `\n/* ${safeTitle} */\n${selector} { fill: ${g.colour}; }\n`;
+            const decls = includeCircles
+                ? `fill: ${g.colour}; opacity: 1;`
+                : `fill: ${g.colour};`;
+            return `\n/* ${safeTitle} */\n${selector} { ${decls} }\n`;
         })
         .join("");
 }
@@ -47,6 +50,7 @@ export function createApp(doc = document) {
     const copyBtn = doc.getElementById("copy-legend");
     // Optional — only rendered when more than one base map is registered.
     const mapSelect = doc.getElementById("base-map-select");
+    const circlesInput = doc.getElementById("toggle-circles");
 
     if (!form || !groupsContainer || !addBtn || !tmpl) {
         // Unreachable in production (the template ships all four IDs). Logged
@@ -201,7 +205,9 @@ export function createApp(doc = document) {
 
     function rebuildPreview(state) {
         if (!livePreviewEnabled || !userStyleEl) return;
-        userStyleEl.textContent = buildCss(state);
+        userStyleEl.textContent = buildCss(state, {
+            includeCircles: circlesInput ? circlesInput.checked : false,
+        });
     }
 
     function rebuildLegend(state) {
@@ -282,6 +288,13 @@ export function createApp(doc = document) {
         }
         if (downloadBtn) {
             downloadBtn.addEventListener("click", downloadSvg);
+        }
+        if (circlesInput) {
+            // Toggle lives outside the <form> (associated via the HTML
+            // `form` attribute, which propagates the value for submission
+            // but not events). A direct listener is required to feed the
+            // live preview.
+            circlesInput.addEventListener("change", requestUpdate);
         }
         if (mapSelect) {
             mapSelect.addEventListener("change", e => {

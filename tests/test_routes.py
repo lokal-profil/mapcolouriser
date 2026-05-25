@@ -89,6 +89,37 @@ class TestIndex:
         body = client.get("/").get_data(as_text=True)
         assert f'title="{sentinel}"' in body
 
+    def test_advanced_settings_present_even_with_single_map(self, client, monkeypatch):
+        import app.maps as maps_module
+        # Mutate the shared dict in place — routes.py aliases the same
+        # object via `from app.maps import MAPS`, so setattr won't reach it
+        # but delitem does (and monkeypatch restores).
+        monkeypatch.delitem(maps_module.MAPS, "world-compact")
+        body = client.get("/").get_data(as_text=True)
+        assert '<details class="advanced-settings"' in body
+        assert 'id="toggle-circles"' in body
+        # No base-map selector when only one map is registered.
+        assert 'id="base-map-select"' not in body
+
+    def test_circles_toggle_renders_in_advanced_settings(self, client):
+        body = client.get("/").get_data(as_text=True)
+        assert 'id="toggle-circles"' in body
+        assert 'name="circles"' in body
+        assert "Show small-country circles" in body
+        assert 'form="colouriser-form"' in body
+        # Default state: unchecked.
+        import re
+        m = re.search(r'<input[^>]*id="toggle-circles"[^>]*>', body)
+        assert m and "checked" not in m.group(0)
+
+    def test_circles_toggle_reflects_session_value(self, client):
+        with client.session_transaction() as s:
+            s["include_circles"] = True
+        body = client.get("/").get_data(as_text=True)
+        import re
+        m = re.search(r'<input[^>]*id="toggle-circles"[^>]*>', body)
+        assert m and "checked" in m.group(0)
+
     def test_option_without_description_has_no_title_attr(self, client, monkeypatch):
         import re
 
@@ -175,6 +206,44 @@ class TestGenerate:
         assert "Unknown map" not in body
         with client.session_transaction() as s:
             assert s["map_key"] == "world"
+
+    def test_post_with_circles_checked_persists_and_adds_opacity(self, client):
+        import re
+        resp = client.post(
+            "/generate",
+            data={
+                "group[0][title]": "Members",
+                "group[0][colour]": "#ff0000",
+                "group[0][countries][]": ["se"],
+                "circles": "1",
+            },
+        )
+        assert resp.status_code == 200
+        body = resp.get_data(as_text=True)
+        # Inspect the injected user CSS specifically — the base SVG itself
+        # contains example `opacity: 1` text in its source comments.
+        m = re.search(r'<style id="map-colouriser-style">(.*?)</style>', body, re.DOTALL)
+        assert m, "user CSS style element missing from response"
+        assert "opacity: 1" in m.group(1)
+        with client.session_transaction() as s:
+            assert s["include_circles"] is True
+
+    def test_post_without_circles_field_omits_opacity(self, client):
+        import re
+        resp = client.post(
+            "/generate",
+            data={
+                "group[0][title]": "Members",
+                "group[0][colour]": "#ff0000",
+                "group[0][countries][]": ["se"],
+            },
+        )
+        body = resp.get_data(as_text=True)
+        m = re.search(r'<style id="map-colouriser-style">(.*?)</style>', body, re.DOTALL)
+        assert m, "user CSS style element missing from response"
+        assert "opacity" not in m.group(1)
+        with client.session_transaction() as s:
+            assert s["include_circles"] is False
 
     def test_invalid_colour_rerenders_form_with_error(self, client):
         resp = client.post(
@@ -303,6 +372,7 @@ class TestReset:
         with client.session_transaction() as s:
             s["last_groups"] = _SAMPLE_SESSION_GROUPS
             s["map_key"] = "world"
+            s["include_circles"] = True
 
         resp = client.post("/reset")
         assert resp.status_code == 302
@@ -311,6 +381,7 @@ class TestReset:
         with client.session_transaction() as s:
             assert "last_groups" not in s
             assert "map_key" not in s
+            assert "include_circles" not in s
 
     def test_index_after_reset_shows_default_form_state(self, client):
         with client.session_transaction() as s:
