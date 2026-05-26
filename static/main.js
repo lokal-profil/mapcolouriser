@@ -101,8 +101,13 @@ export function createApp(doc = document) {
         if (groupEl) {
             groupEl.dataset.index = idxStr;
         }
-        root.querySelectorAll("[name]").forEach(el => {
-            el.setAttribute("name", el.getAttribute("name").replaceAll("__INDEX__", idxStr));
+        // `id`/`for` carry __INDEX__ too (label↔select association) — patch
+        // them alongside `name` so each cloned group keeps unique, paired ids.
+        root.querySelectorAll("[name], [id], [for]").forEach(el => {
+            for (const attr of ["name", "id", "for"]) {
+                const val = el.getAttribute(attr);
+                if (val) el.setAttribute(attr, val.replaceAll("__INDEX__", idxStr));
+            }
         });
     }
 

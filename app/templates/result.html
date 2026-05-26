@@ -13,6 +13,6 @@
     </div>
     <details class="result-legend" open>
         <summary>Wikitext legend</summary>
-        <textarea id="legend-output" readonly rows="{{ [legend.count('\n') + 1, 2] | max }}">{{ legend }}</textarea>
+        <textarea id="legend-output" aria-label="Wikitext legend" readonly rows="{{ [legend.count('\n') + 1, 2] | max }}">{{ legend }}</textarea>
     </details>
 {% endblock %}

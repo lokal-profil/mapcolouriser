@@ -5,7 +5,7 @@
             <summary>Advanced</summary>
             <div class="advanced-settings-panel">
                 {% if maps|length > 1 %}
-                <label>
+                <label for="base-map-select">
                     Base map
                     <select name="map" id="base-map-select" form="colouriser-form">
                         {% for key, info in maps.items() %}
@@ -63,9 +63,9 @@
                                        required />
                             </label>
                         </div>
-                        <label>
+                        <label for="countries-{{ group.index }}">
                             Countries
-                            <select name="group[{{ group.index }}][countries][]" multiple required>
+                            <select id="countries-{{ group.index }}" name="group[{{ group.index }}][countries][]" multiple required>
                                 {% for display, code in countries %}
                                     <option value="{{ code }}"
                                             {% if code in group.countries %}selected{% endif %}>
@@ -97,7 +97,7 @@
             </div>
             <details id="legend-box">
                 <summary>Wikitext legend</summary>
-                <textarea id="legend-output" readonly rows="2"></textarea>
+                <textarea id="legend-output" aria-label="Wikitext legend" readonly rows="2"></textarea>
                 <button type="button" id="copy-legend">Copy</button>
             </details>
         </aside>
@@ -120,9 +120,9 @@
                            value="#000000" required />
                 </label>
             </div>
-            <label>
+            <label for="countries-__INDEX__">
                 Countries
-                <select name="group[__INDEX__][countries][]" multiple required>
+                <select id="countries-__INDEX__" name="group[__INDEX__][countries][]" multiple required>
                     {% for display, code in countries %}
                         <option value="{{ code }}">{{ display }}</option>
                     {% endfor %}

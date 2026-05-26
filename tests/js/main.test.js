@@ -32,7 +32,7 @@ const FIXTURE_HTML = `<!doctype html>
         <div class="group" data-index="__INDEX__">
             <input name="group[__INDEX__][title]" type="text" />
             <input name="group[__INDEX__][colour]" type="color" />
-            <select name="group[__INDEX__][countries][]" multiple>
+            <select id="countries-__INDEX__" name="group[__INDEX__][countries][]" multiple>
                 <option value="se">Sweden</option>
                 <option value="de">Germany</option>
             </select>
@@ -182,6 +182,17 @@ describe("createApp", () => {
             expect(group.dataset.index).toBe("0");
             expect(group.querySelector('input[name="group[0][title]"]')).not.toBeNull();
             expect(group.querySelector('select[name="group[0][countries][]"]')).not.toBeNull();
+        });
+
+        it("patches id placeholders so cloned groups get unique country-select ids", () => {
+            const app = createApp();
+            app.addGroup();
+            app.addGroup();
+            const ids = Array.from(document.querySelectorAll('select[id^="countries-"]'))
+                .map(el => el.id);
+            expect(ids).toEqual(["countries-0", "countries-1"]);
+            // No literal placeholder leaks through.
+            expect(document.querySelector('[id*="__INDEX__"]')).toBeNull();
         });
     });
 
