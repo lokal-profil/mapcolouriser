@@ -122,3 +122,39 @@ class TestMapsRegistry:
         # addition can't silently rebind argument positions.
         with pytest.raises(TypeError):
             MapInfo("x.svg", "X")  # type: ignore[misc]
+
+
+class TestMapInfoBaseClassFields:
+    def test_default_land_classes(self):
+        info = MapInfo(filename="x.svg", label="X")
+        assert info.land_classes == ("landxx", "circlexx")
+
+    def test_default_ocean_classes(self):
+        info = MapInfo(filename="x.svg", label="X")
+        assert info.ocean_classes == ("oceanxx",)
+
+    def test_opt_out_with_none(self):
+        # A future map with no ocean equivalent declares ocean_classes=None;
+        # the picker hides and build_css skips the rule.
+        info = MapInfo(filename="x.svg", label="X", ocean_classes=None)
+        assert info.ocean_classes is None
+
+    def test_empty_tuple_rejected(self):
+        with pytest.raises(ValueError, match="non-empty tuple"):
+            MapInfo(filename="x.svg", label="X", land_classes=())
+
+    def test_invalid_class_name_rejected(self):
+        with pytest.raises(ValueError, match="valid CSS class name"):
+            MapInfo(filename="x.svg", label="X", land_classes=("9bad",))
+
+    def test_class_name_with_leading_dot_rejected(self):
+        # Field stores bare class names; the leading "." is added by
+        # _selector_from_classes at build time.
+        with pytest.raises(ValueError, match="valid CSS class name"):
+            MapInfo(filename="x.svg", label="X", land_classes=(".landxx",))
+
+    def test_world_compact_keeps_defaults(self):
+        # Both shipped maps share the canonical SVG class names today; the
+        # base-colour pickers must apply to either.
+        assert MAPS["world-compact"].land_classes == ("landxx", "circlexx")
+        assert MAPS["world-compact"].ocean_classes == ("oceanxx",)

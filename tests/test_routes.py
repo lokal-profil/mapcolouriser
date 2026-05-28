@@ -351,6 +351,210 @@ class TestGenerate:
         assert "countr" in body  # countries / country
 
 
+class TestBaseColours:
+    """Land / ocean base-colour pickers in the Advanced panel."""
+
+    # The shipped global defaults (app.colouriser.DEFAULT_LAND/OCEAN_COLOUR).
+    # Pinned here as literals so a change to the constant is a deliberate,
+    # one-line update with a failing test to confirm intent.
+    DEFAULT_LAND = "#dddddd"
+    DEFAULT_OCEAN = "#ffffff"
+
+    # Default MapInfo land_classes / ocean_classes in the comma-joined form
+    # the template emits into the data-* attributes (the CSS-selector form,
+    # ".landxx, .circlexx", is asserted separately in test_colouriser.py).
+    LAND_CLASSES_ATTR = "landxx,circlexx"
+    OCEAN_CLASSES_ATTR = "oceanxx"
+
+    def _post_min(self, **extra):
+        data = {
+            "group[0][title]": "Members",
+            "group[0][colour]": "#ff0000",
+            "group[0][countries][]": ["se"],
+        }
+        data.update(extra)
+        return data
+
+    def test_defaults_emitted_when_form_omits_picker_values(self, client):
+        import re
+
+        resp = client.post("/generate", data=self._post_min())
+        body = resp.get_data(as_text=True)
+        m = re.search(r'<style id="map-colouriser-style">(.*?)</style>', body, re.DOTALL)
+        assert m, "user CSS style element missing"
+        css = m.group(1)
+        assert "/* Land and small circles */" in css
+        assert f".landxx, .circlexx {{ fill: {self.DEFAULT_LAND}; }}" in css
+        assert "/* Oceans, seas, and large lakes */" in css
+        assert f".oceanxx {{ fill: {self.DEFAULT_OCEAN}; }}" in css
+        # Omitted picker fields resolve to the defaults and persist as such.
+        with client.session_transaction() as s:
+            assert s["land_colour"] == self.DEFAULT_LAND
+            assert s["ocean_colour"] == self.DEFAULT_OCEAN
+
+    def test_custom_land_persists_in_session_and_rendered_svg(self, client):
+        import re
+
+        resp = client.post("/generate", data=self._post_min(land_colour="#112233"))
+        body = resp.get_data(as_text=True)
+        m = re.search(r'<style id="map-colouriser-style">(.*?)</style>', body, re.DOTALL)
+        assert m and ".landxx, .circlexx { fill: #112233; }" in m.group(1)
+        with client.session_transaction() as s:
+            assert s["land_colour"] == "#112233"
+
+    def test_custom_ocean_persists_in_session_and_rendered_svg(self, client):
+        import re
+
+        resp = client.post("/generate", data=self._post_min(ocean_colour="#abcdef"))
+        body = resp.get_data(as_text=True)
+        m = re.search(r'<style id="map-colouriser-style">(.*?)</style>', body, re.DOTALL)
+        assert m and ".oceanxx { fill: #abcdef; }" in m.group(1)
+        with client.session_transaction() as s:
+            assert s["ocean_colour"] == "#abcdef"
+
+    def test_uppercase_hex_colour_round_trips(self, client):
+        import re
+
+        # _COLOUR_RE accepts A-F; the value must survive case-intact into both
+        # the rendered CSS and the session.
+        resp = client.post("/generate", data=self._post_min(land_colour="#ABCDEF"))
+        body = resp.get_data(as_text=True)
+        m = re.search(r'<style id="map-colouriser-style">(.*?)</style>', body, re.DOTALL)
+        assert m and ".landxx, .circlexx { fill: #ABCDEF; }" in m.group(1)
+        with client.session_transaction() as s:
+            assert s["land_colour"] == "#ABCDEF"
+
+    def test_whitespace_colour_resolves_to_default(self, client):
+        import re
+
+        resp = client.post("/generate", data=self._post_min(land_colour="   "))
+        body = resp.get_data(as_text=True)
+        m = re.search(r'<style id="map-colouriser-style">(.*?)</style>', body, re.DOTALL)
+        assert m and f".landxx, .circlexx {{ fill: {self.DEFAULT_LAND}; }}" in m.group(1)
+
+    def test_invalid_land_colour_rerenders_with_error(self, client):
+        resp = client.post("/generate", data=self._post_min(land_colour="red"))
+        assert resp.status_code == 200
+        body = resp.get_data(as_text=True).lower()
+        # Re-rendered form (not the result page).
+        assert 'id="colouriser-form"' in body
+        assert "land fill" in body and "#rrggbb" in body
+
+    def test_invalid_ocean_colour_rerenders_with_error(self, client):
+        resp = client.post("/generate", data=self._post_min(ocean_colour="blueish"))
+        assert resp.status_code == 200
+        body = resp.get_data(as_text=True).lower()
+        assert 'id="colouriser-form"' in body
+        assert "ocean fill" in body and "#rrggbb" in body
+
+    def test_index_reflects_session_land_colour_in_picker_value(self, client):
+        import re
+
+        with client.session_transaction() as s:
+            s["land_colour"] = "#112233"
+        body = client.get("/").get_data(as_text=True)
+        m = re.search(r'<input[^>]*id="land-colour"[^>]*>', body)
+        assert m and 'value="#112233"' in m.group(0)
+
+    def test_index_reflects_session_ocean_colour_in_picker_value(self, client):
+        import re
+
+        with client.session_transaction() as s:
+            s["ocean_colour"] = "#abcdef"
+        body = client.get("/").get_data(as_text=True)
+        m = re.search(r'<input[^>]*id="ocean-colour"[^>]*>', body)
+        assert m and 'value="#abcdef"' in m.group(0)
+
+    def test_reset_button_disabled_when_picker_at_default(self, client):
+        import re
+
+        body = client.get("/").get_data(as_text=True)
+        m = re.search(r'<button[^>]*id="reset-land"[^>]*>', body)
+        assert m and "disabled" in m.group(0)
+
+    def test_reset_button_disabled_for_uppercase_default(self, client):
+        import re
+
+        # The template compares via `| lower`, so #DDDDDD must count as the
+        # default and leave Reset disabled.
+        with client.session_transaction() as s:
+            s["land_colour"] = self.DEFAULT_LAND.upper()
+        body = client.get("/").get_data(as_text=True)
+        m = re.search(r'<button[^>]*id="reset-land"[^>]*>', body)
+        assert m and "disabled" in m.group(0)
+
+    def test_reset_button_enabled_when_picker_overridden(self, client):
+        import re
+
+        with client.session_transaction() as s:
+            s["land_colour"] = "#112233"
+        body = client.get("/").get_data(as_text=True)
+        m = re.search(r'<button[^>]*id="reset-land"[^>]*>', body)
+        assert m and "disabled" not in m.group(0)
+
+    def test_option_data_attributes_carry_classes(self, client):
+        body = client.get("/").get_data(as_text=True)
+        # Both shipped maps share the canonical class names today.
+        assert f'data-land-classes="{self.LAND_CLASSES_ATTR}"' in body
+        assert f'data-ocean-classes="{self.OCEAN_CLASSES_ATTR}"' in body
+
+    def test_form_data_attributes_expose_defaults_and_current_classes(self, client):
+        import re
+
+        body = client.get("/").get_data(as_text=True)
+        m = re.search(r'<form[^>]*id="colouriser-form"[^>]*>', body)
+        assert m
+        assert f'data-default-land-colour="{self.DEFAULT_LAND}"' in m.group(0)
+        assert f'data-default-ocean-colour="{self.DEFAULT_OCEAN}"' in m.group(0)
+        assert f'data-land-classes="{self.LAND_CLASSES_ATTR}"' in m.group(0)
+        assert f'data-ocean-classes="{self.OCEAN_CLASSES_ATTR}"' in m.group(0)
+
+    def test_picker_row_hidden_server_side_when_map_opts_out(self, client, monkeypatch):
+        import app.maps as maps_module
+        from app.maps import MapInfo
+
+        # Reduce to a single map declaring no ocean, exercising the Jinja
+        # gate. Mutate the shared dict so routes.py's aliased MAPS sees it.
+        monkeypatch.delitem(maps_module.MAPS, "world-compact")
+        monkeypatch.setitem(
+            maps_module.MAPS,
+            "world",
+            MapInfo(
+                filename="BlankMap-World.svg",
+                label="World",
+                ocean_classes=None,
+            ),
+        )
+        body = client.get("/").get_data(as_text=True)
+        assert 'id="land-colour-row"' in body
+        assert 'id="ocean-colour-row"' not in body
+
+    def test_generate_skips_ocean_rule_when_map_opts_out(self, client, monkeypatch):
+        import re
+
+        import app.maps as maps_module
+        from app.maps import MapInfo
+
+        monkeypatch.delitem(maps_module.MAPS, "world-compact")
+        monkeypatch.setitem(
+            maps_module.MAPS,
+            "world",
+            MapInfo(
+                filename="BlankMap-World.svg",
+                label="World",
+                ocean_classes=None,
+            ),
+        )
+        resp = client.post("/generate", data=self._post_min(ocean_colour="#abcdef"))
+        body = resp.get_data(as_text=True)
+        m = re.search(r'<style id="map-colouriser-style">(.*?)</style>', body, re.DOTALL)
+        assert m and "oceanxx" not in m.group(1)
+        # The opted-out side's colour is still persisted — session storage is
+        # independent of whether a rule was emitted.
+        with client.session_transaction() as s:
+            assert s["ocean_colour"] == "#abcdef"
+
+
 class TestBackToForm:
     def test_index_after_generate_repopulates_form(self, client):
         client.post(
@@ -415,6 +619,8 @@ class TestReset:
             s["last_groups"] = _SAMPLE_SESSION_GROUPS
             s["map_key"] = "world"
             s["include_circles"] = True
+            s["land_colour"] = "#112233"
+            s["ocean_colour"] = "#abcdef"
 
         resp = client.post("/reset")
         assert resp.status_code == 302
@@ -424,6 +630,8 @@ class TestReset:
             assert "last_groups" not in s
             assert "map_key" not in s
             assert "include_circles" not in s
+            assert "land_colour" not in s
+            assert "ocean_colour" not in s
 
     def test_index_after_reset_shows_default_form_state(self, client):
         with client.session_transaction() as s:
@@ -478,6 +686,47 @@ class TestDownload:
                 }
             ]
             sess["map_key"] = "world"
+        resp = client.get("/download")
+        assert resp.status_code == 400
+        assert b"invalid" in resp.data.lower() or b"regenerate" in resp.data.lower()
+
+    def test_honours_session_base_colours(self, client):
+        import re
+
+        with client.session_transaction() as sess:
+            sess["last_groups"] = [
+                {
+                    "index": 0,
+                    "title": "OK",
+                    "colour": "#ff0000",
+                    "countries": ["se"],
+                }
+            ]
+            sess["map_key"] = "world"
+            sess["land_colour"] = "#112233"
+            sess["ocean_colour"] = "#abcdef"
+        resp = client.get("/download")
+        assert resp.status_code == 200
+        body = resp.data.decode("utf-8")
+        m = re.search(r'<style id="map-colouriser-style">(.*?)</style>', body, re.DOTALL)
+        assert m
+        assert ".landxx, .circlexx { fill: #112233; }" in m.group(1)
+        assert ".oceanxx { fill: #abcdef; }" in m.group(1)
+
+    def test_returns_400_when_session_colour_is_malformed(self, client):
+        # build_css re-validates the colour and raises ValueError, which the
+        # download handler must catch and surface as a 400 rather than a 500.
+        with client.session_transaction() as sess:
+            sess["last_groups"] = [
+                {
+                    "index": 0,
+                    "title": "OK",
+                    "colour": "#ff0000",
+                    "countries": ["se"],
+                }
+            ]
+            sess["map_key"] = "world"
+            sess["land_colour"] = "red"  # not #rrggbb
         resp = client.get("/download")
         assert resp.status_code == 400
         assert b"invalid" in resp.data.lower() or b"regenerate" in resp.data.lower()

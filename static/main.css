@@ -61,6 +61,18 @@ button { cursor: pointer; padding: 0.4rem 0.8rem; }
 }
 .advanced-settings label { display: flex; gap: 0.4rem; align-items: center; }
 
+/* Land/ocean base-colour pickers — picker + Reset on one line. The reset
+   button disables when the picker matches the global default so the enabled
+   state doubles as an "is this overridden?" indicator. */
+.base-colour-row { display: flex; gap: 0.4rem; align-items: center; }
+/* space-between pushes the swatch to the label's right edge. Both rows
+   stretch to the same panel width, so the swatches (and the Reset buttons
+   after them) line up vertically despite the differing label text widths. */
+.base-colour-row label { flex: 1; justify-content: space-between; padding-right: 2em; }
+.base-colour-row input[type="color"] { width: 2.5rem; height: 1.6rem; padding: 0; border: 1px solid #ccc; }
+.base-colour-reset { font-size: 0.9rem; padding: 0.2rem 0.5rem; }
+.base-colour-reset[disabled] { opacity: 0.4; cursor: default; }
+
 .live-preview-toggle { display: inline-flex; gap: 0.3rem; align-items: center; cursor: pointer; }
 .circles-toggle { cursor: pointer; }
 /* Visually replaced by .switch, but the input itself stays a 1×1 hit

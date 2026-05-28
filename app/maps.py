@@ -12,6 +12,7 @@ just before the close, matching the client-side preview's approach.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from functools import cache
 from pathlib import Path
@@ -19,6 +20,8 @@ from pathlib import Path
 from app.svg_injector import add_viewbox_if_missing, validate_svg
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
+
+_CLASS_NAME_RE = re.compile(r"^[a-zA-Z_][\w-]*$")
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -28,11 +31,29 @@ class MapInfo:
     ``filename`` is the on-disk SVG name in ``static/``; ``label`` is the
     selector option text; ``description`` (when set) renders as a ``title``
     tooltip on the option.
+
+    ``land_classes`` / ``ocean_classes`` drive the Advanced-panel base-colour
+    pickers: each is a tuple of CSS class names (no leading ``.``) joined into
+    a selector at build time. Set to ``None`` to opt a map out of the picker
+    entirely (the UI hides the row and no rule is emitted).
     """
 
     filename: str
     label: str
     description: str = ""
+    land_classes: tuple[str, ...] | None = ("landxx", "circlexx")
+    ocean_classes: tuple[str, ...] | None = ("oceanxx",)
+
+    def __post_init__(self) -> None:
+        for field_name in ("land_classes", "ocean_classes"):
+            value = getattr(self, field_name)
+            if value is None:
+                continue
+            if not value:
+                raise ValueError(f"{field_name} must be None or a non-empty tuple")
+            for name in value:
+                if not _CLASS_NAME_RE.match(name):
+                    raise ValueError(f"{field_name} entry {name!r} is not a valid CSS class name")
 
 
 MAPS: dict[str, MapInfo] = {

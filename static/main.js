@@ -12,21 +12,35 @@
 // and calls `createApp().init()`. Tests import the pure helpers and the
 // factory directly without triggering DOM side effects.
 
-export function buildCss(state, { includeCircles = false } = {}) {
-    return state
-        .filter(g => g.codes.length > 0)
-        .map(g => {
-            // Visual-only safety net so a mid-edit `*/` typo doesn't break
-            // the preview's CSS comment. The real defence against unsafe
-            // titles is form.checkValidity() before Blob download.
-            const safeTitle = g.title.replace(/\*\//g, "* /");
-            const selector = g.codes.map(c => `.${c}`).join(", ");
-            const decls = includeCircles
-                ? `fill: ${g.colour}; opacity: 1;`
-                : `fill: ${g.colour};`;
-            return `\n/* ${safeTitle} */\n${selector} { ${decls} }\n`;
-        })
-        .join("");
+export function buildCss(state, {
+    includeCircles = false,
+    land = null,
+    ocean = null,
+    landClasses = null,
+    oceanClasses = null,
+} = {}) {
+    const blocks = [];
+    if (land && landClasses && landClasses.length) {
+        const selector = landClasses.map(c => `.${c}`).join(", ");
+        blocks.push(`\n/* Land and small circles */\n${selector} { fill: ${land}; }\n`);
+    }
+    if (ocean && oceanClasses && oceanClasses.length) {
+        const selector = oceanClasses.map(c => `.${c}`).join(", ");
+        blocks.push(`\n/* Oceans, seas, and large lakes */\n${selector} { fill: ${ocean}; }\n`);
+    }
+    for (const g of state) {
+        if (g.codes.length === 0) continue;
+        // Visual-only safety net so a mid-edit `*/` typo doesn't break the
+        // preview's CSS comment. The real defence against unsafe titles is
+        // form.checkValidity() before Blob download.
+        const safeTitle = g.title.replace(/\*\//g, "* /");
+        const selector = g.codes.map(c => `.${c}`).join(", ");
+        const decls = includeCircles
+            ? `fill: ${g.colour}; opacity: 1;`
+            : `fill: ${g.colour};`;
+        blocks.push(`\n/* ${safeTitle} */\n${selector} { ${decls} }\n`);
+    }
+    return blocks.join("");
 }
 
 export function buildLegend(state) {
@@ -51,6 +65,16 @@ export function createApp(doc = document) {
     // Optional — only rendered when more than one base map is registered.
     const mapSelect = doc.getElementById("base-map-select");
     const circlesInput = doc.getElementById("toggle-circles");
+    // Optional — only rendered when the active map declares land_classes /
+    // ocean_classes (the row is server-side gated by Jinja). The inputs hold
+    // the colour; the reset buttons revert to the global default and double
+    // as the "is this overridden?" indicator via their disabled state.
+    const landColourInput = doc.getElementById("land-colour");
+    const landResetBtn = doc.getElementById("reset-land");
+    const landColourRow = doc.getElementById("land-colour-row");
+    const oceanColourInput = doc.getElementById("ocean-colour");
+    const oceanResetBtn = doc.getElementById("reset-ocean");
+    const oceanColourRow = doc.getElementById("ocean-colour-row");
 
     if (!form || !groupsContainer || !addBtn || !tmpl) {
         // Unreachable in production (the template ships all four IDs). Logged
@@ -67,6 +91,35 @@ export function createApp(doc = document) {
     } catch (err) {
         console.warn("map-colouriser: failed to parse default colour palette", err);
         palette = [];
+    }
+
+    const defaultLandColour = form.dataset.defaultLandColour || "";
+    const defaultOceanColour = form.dataset.defaultOceanColour || "";
+
+    function parseClassList(readDataset) {
+        // Multi-map case: classes live on each <option>, read the selected one.
+        // Single-map case (no selector rendered): fall back to the form's
+        // data-*-classes attribute, which the template always renders from
+        // current_map. Empty string -> [] -> "no rule, hide the row".
+        const el = (mapSelect && mapSelect.selectedOptions[0]) || form;
+        const raw = readDataset(el.dataset) || "";
+        return raw ? raw.split(",").map(s => s.trim()).filter(Boolean) : [];
+    }
+
+    // Class arrays for the currently-selected base map. Refreshed by the
+    // map-selector change handler. Empty == "no rule" for that side; the
+    // corresponding picker row is also hidden.
+    let landClasses = parseClassList(d => d.landClasses);
+    let oceanClasses = parseClassList(d => d.oceanClasses);
+
+    function syncResetState(input, btn, defaultValue) {
+        if (!input || !btn || !defaultValue) return;
+        btn.disabled = input.value.toLowerCase() === defaultValue.toLowerCase();
+    }
+
+    function setRowVisible(row, visible) {
+        if (!row) return;
+        row.style.display = visible ? "" : "none";
     }
 
     // The selector (when present) is the canonical source — its `selected`
@@ -212,6 +265,10 @@ export function createApp(doc = document) {
         if (!livePreviewEnabled || !userStyleEl) return;
         userStyleEl.textContent = buildCss(state, {
             includeCircles: circlesInput ? circlesInput.checked : false,
+            land: landColourInput ? landColourInput.value : null,
+            ocean: oceanColourInput ? oceanColourInput.value : null,
+            landClasses,
+            oceanClasses,
         });
     }
 
@@ -308,7 +365,37 @@ export function createApp(doc = document) {
                 // initMap re-sets mapLoaded=true on success.
                 mapLoaded = false;
                 updateActionState();
+                // Refresh class arrays from the newly-selected option and
+                // hide picker rows whose classes are empty. Picker values
+                // are intentionally preserved across map switches (the
+                // global default doesn't change with the map).
+                landClasses = parseClassList(d => d.landClasses);
+                oceanClasses = parseClassList(d => d.oceanClasses);
+                setRowVisible(landColourRow, landClasses.length > 0);
+                setRowVisible(oceanColourRow, oceanClasses.length > 0);
                 initMap(mapKey);
+            });
+        }
+        if (landColourInput && landResetBtn) {
+            landColourInput.addEventListener("change", () => {
+                syncResetState(landColourInput, landResetBtn, defaultLandColour);
+                requestUpdate();
+            });
+            landResetBtn.addEventListener("click", () => {
+                landColourInput.value = defaultLandColour;
+                syncResetState(landColourInput, landResetBtn, defaultLandColour);
+                requestUpdate();
+            });
+        }
+        if (oceanColourInput && oceanResetBtn) {
+            oceanColourInput.addEventListener("change", () => {
+                syncResetState(oceanColourInput, oceanResetBtn, defaultOceanColour);
+                requestUpdate();
+            });
+            oceanResetBtn.addEventListener("click", () => {
+                oceanColourInput.value = defaultOceanColour;
+                syncResetState(oceanColourInput, oceanResetBtn, defaultOceanColour);
+                requestUpdate();
             });
         }
         if (copyBtn && legendOutput) {

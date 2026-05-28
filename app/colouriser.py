@@ -34,9 +34,21 @@ DEFAULT_GROUP_COLOURS = (
     "#AA4499",  # purple
 )
 
+# Global fallback colours for the base land/ocean fills (#dddddd is Tol-Muted's
+# reserved "missing/bad data" neutral). When a map declares land/ocean classes,
+# build_css always emits a base-fill rule for that side — using the user's
+# chosen colour, or these defaults when none was supplied — so the base map is
+# normalised regardless of its native fills.
+DEFAULT_LAND_COLOUR = "#dddddd"
+DEFAULT_OCEAN_COLOUR = "#ffffff"
+
 _TITLE_RE = re.compile(f"^{TITLE_PATTERN}$")
 _COLOUR_RE = re.compile(f"^{COLOUR_PATTERN}$")
 _CODE_RE = re.compile(r"^[a-z]{2}$")
+
+
+def _selector_from_classes(classes: tuple[str, ...]) -> str:
+    return ", ".join(f".{c}" for c in classes)
 
 
 @dataclass(frozen=True, slots=True)
@@ -59,7 +71,15 @@ class Group:
             raise ValueError(f"group {self.title!r} has duplicate country codes")
 
 
-def build_css(groups: list[Group], include_small_country_circles: bool = False) -> str:
+def build_css(
+    groups: list[Group],
+    include_small_country_circles: bool = False,
+    *,
+    land: str | None = None,
+    ocean: str | None = None,
+    land_classes: tuple[str, ...] | None = None,
+    ocean_classes: tuple[str, ...] | None = None,
+) -> str:
     """Render groups as a CSS snippet matching the SVG's class names.
 
     Each group becomes one ``/* title */`` comment followed by a single rule
@@ -69,8 +89,27 @@ def build_css(groups: list[Group], include_small_country_circles: bool = False) 
     When ``include_small_country_circles`` is True, each rule also sets
     ``opacity: 1`` so the small-country circles in compatible base maps
     become visible alongside their country fills.
+
+    ``land`` / ``ocean`` (hex strings) plus ``land_classes`` / ``ocean_classes``
+    (tuples of CSS class names) prepend base-layer fill rules above the group
+    blocks. A side is emitted iff both its colour and its class tuple are
+    supplied; pass ``None`` for either to skip that side.
     """
     blocks: list[str] = []
+
+    if land and land_classes:
+        if not _COLOUR_RE.match(land):
+            raise ValueError(f"land colour {land!r} must match {COLOUR_PATTERN}")
+        land_selector = _selector_from_classes(land_classes)
+        blocks.append(f"\n/* Land and small circles */\n{land_selector} {{ fill: {land}; }}\n")
+    if ocean and ocean_classes:
+        if not _COLOUR_RE.match(ocean):
+            raise ValueError(f"ocean colour {ocean!r} must match {COLOUR_PATTERN}")
+        ocean_selector = _selector_from_classes(ocean_classes)
+        blocks.append(
+            f"\n/* Oceans, seas, and large lakes */\n{ocean_selector} {{ fill: {ocean}; }}\n"
+        )
+
     extra = " opacity: 1;" if include_small_country_circles else ""
     for group in groups:
         selector = ", ".join(f".{code}" for code in group.country_codes)

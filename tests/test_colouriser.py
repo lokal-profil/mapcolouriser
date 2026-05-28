@@ -1,6 +1,13 @@
 import pytest
 
-from app.colouriser import Group, build_css, build_legend
+from app.colouriser import (
+    DEFAULT_LAND_COLOUR,
+    DEFAULT_OCEAN_COLOUR,
+    Group,
+    _selector_from_classes,
+    build_css,
+    build_legend,
+)
 
 
 class TestGroup:
@@ -117,6 +124,72 @@ class TestBuildCss:
         groups = [Group(title="X", colour="#ff0000", country_codes=["se"])]
         css = build_css(groups, include_small_country_circles=True)
         assert ".se { fill: #ff0000; opacity: 1; }" in css
+
+
+class TestBuildCssBaseLayers:
+    def test_land_emits_comment_and_rule(self):
+        css = build_css([], land="#dddddd", land_classes=("landxx", "circlexx"))
+        assert "/* Land and small circles */" in css
+        assert ".landxx, .circlexx { fill: #dddddd; }" in css
+
+    def test_ocean_emits_comment_and_rule(self):
+        css = build_css([], ocean="#0099ff", ocean_classes=("oceanxx",))
+        assert "/* Oceans, seas, and large lakes */" in css
+        assert ".oceanxx { fill: #0099ff; }" in css
+
+    def test_land_skipped_when_classes_none(self):
+        css = build_css([], land="#dddddd", land_classes=None)
+        assert "landxx" not in css
+
+    def test_ocean_skipped_when_classes_none(self):
+        css = build_css([], ocean="#ffffff", ocean_classes=None)
+        assert "oceanxx" not in css
+
+    def test_land_skipped_when_colour_missing(self):
+        # Pure routing safety net: build_css is robust if the caller passes
+        # classes without a colour (shouldn't happen in practice, but the
+        # function shouldn't emit `.landxx { fill: None; }`).
+        css = build_css([], land=None, land_classes=("landxx",))
+        assert "landxx" not in css
+
+    def test_invalid_land_colour_raises(self):
+        with pytest.raises(ValueError, match="land colour"):
+            build_css([], land="red", land_classes=("landxx",))
+
+    def test_invalid_ocean_colour_raises(self):
+        with pytest.raises(ValueError, match="ocean colour"):
+            build_css([], ocean="not-a-hex", ocean_classes=("oceanxx",))
+
+    def test_base_layers_precede_group_blocks(self):
+        css = build_css(
+            [Group(title="Members", colour="#ff0000", country_codes=["se"])],
+            land=DEFAULT_LAND_COLOUR,
+            ocean=DEFAULT_OCEAN_COLOUR,
+            land_classes=("landxx", "circlexx"),
+            ocean_classes=("oceanxx",),
+        )
+        assert css.index("/* Land and small circles */") < css.index("/* Members */")
+        assert css.index("/* Oceans, seas, and large lakes */") < css.index("/* Members */")
+
+    def test_base_layers_omit_opacity_even_with_circles_toggle(self):
+        # The circles toggle adds `opacity: 1` to per-group rules so circles
+        # for the user's selected countries become visible. The base land/
+        # ocean rules don't need opacity — they target the broad strata.
+        css = build_css(
+            [],
+            include_small_country_circles=True,
+            land=DEFAULT_LAND_COLOUR,
+            land_classes=("landxx", "circlexx"),
+        )
+        assert "opacity" not in css
+
+
+class TestSelectorFromClasses:
+    def test_single_class(self):
+        assert _selector_from_classes(("oceanxx",)) == ".oceanxx"
+
+    def test_multiple_classes(self):
+        assert _selector_from_classes(("landxx", "circlexx")) == ".landxx, .circlexx"
 
 
 class TestBuildLegend:

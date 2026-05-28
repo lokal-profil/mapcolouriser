@@ -19,6 +19,8 @@ from flask import (
 from app.colouriser import (
     COLOUR_PATTERN,
     DEFAULT_GROUP_COLOURS,
+    DEFAULT_LAND_COLOUR,
+    DEFAULT_OCEAN_COLOUR,
     TITLE_PATTERN,
     Group,
     build_css,
@@ -40,19 +42,28 @@ _VALID_CODES = frozenset(code for _, code in all_countries())
 _SESSION_MAP_KEY = "map_key"
 _SESSION_LAST_GROUPS = "last_groups"
 _SESSION_INCLUDE_CIRCLES = "include_circles"
+_SESSION_LAND_COLOUR = "land_colour"
+_SESSION_OCEAN_COLOUR = "ocean_colour"
 
 
 @bp.get("/")
 def index() -> str:
     session_map_key = session.get(_SESSION_MAP_KEY, DEFAULT_MAP)
+    map_key = session_map_key if session_map_key in MAPS else DEFAULT_MAP
     return render_template(
         "index.html",
         countries=all_countries(),
         groups=session.get(_SESSION_LAST_GROUPS) or _default_form_state(),
         errors=[],
         title_pattern=TITLE_PATTERN,
+        colour_pattern=COLOUR_PATTERN,
         default_colours=DEFAULT_GROUP_COLOURS,
-        map_key=session_map_key if session_map_key in MAPS else DEFAULT_MAP,
+        default_land_colour=DEFAULT_LAND_COLOUR,
+        default_ocean_colour=DEFAULT_OCEAN_COLOUR,
+        land_colour=session.get(_SESSION_LAND_COLOUR, DEFAULT_LAND_COLOUR),
+        ocean_colour=session.get(_SESSION_OCEAN_COLOUR, DEFAULT_OCEAN_COLOUR),
+        map_key=map_key,
+        current_map=MAPS[map_key],
         maps=MAPS,
         include_circles=bool(session.get(_SESSION_INCLUDE_CIRCLES, False)),
     )
@@ -63,28 +74,49 @@ def generate() -> Response | str:
     raw_groups = _parse_groups(request.form)
     map_key = request.form.get("map") or DEFAULT_MAP
     include_circles = request.form.get("circles") == "1"
-    errors = _validate(raw_groups, map_key)
+    land_colour, ocean_colour, base_errors = _resolve_base_colours(request.form)
+    errors = _validate(raw_groups, map_key) + base_errors
 
     if errors:
+        safe_key = map_key if map_key in MAPS else DEFAULT_MAP
         return render_template(
             "index.html",
             countries=all_countries(),
             groups=raw_groups or _default_form_state(),
             errors=errors,
             title_pattern=TITLE_PATTERN,
+            colour_pattern=COLOUR_PATTERN,
             default_colours=DEFAULT_GROUP_COLOURS,
-            map_key=map_key if map_key in MAPS else DEFAULT_MAP,
+            default_land_colour=DEFAULT_LAND_COLOUR,
+            default_ocean_colour=DEFAULT_OCEAN_COLOUR,
+            land_colour=land_colour,
+            ocean_colour=ocean_colour,
+            map_key=safe_key,
+            current_map=MAPS[safe_key],
             maps=MAPS,
             include_circles=include_circles,
         )
 
     groups = _build_groups(raw_groups)
-    svg = render_map(map_key, build_css(groups, include_small_country_circles=include_circles))
+    current_map = MAPS[map_key]
+    svg = render_map(
+        map_key,
+        build_css(
+            groups,
+            include_small_country_circles=include_circles,
+            land=land_colour,
+            ocean=ocean_colour,
+            land_classes=current_map.land_classes,
+            ocean_classes=current_map.ocean_classes,
+        ),
+    )
     legend = build_legend(groups)
 
     session[_SESSION_MAP_KEY] = map_key
     session[_SESSION_LAST_GROUPS] = raw_groups
     session[_SESSION_INCLUDE_CIRCLES] = include_circles
+    session[_SESSION_LAND_COLOUR] = land_colour
+    session[_SESSION_OCEAN_COLOUR] = ocean_colour
 
     return render_template("result.html", svg=svg, legend=legend)
 
@@ -95,6 +127,8 @@ def reset() -> Response:
     session.pop(_SESSION_LAST_GROUPS, None)
     session.pop(_SESSION_MAP_KEY, None)
     session.pop(_SESSION_INCLUDE_CIRCLES, None)
+    session.pop(_SESSION_LAND_COLOUR, None)
+    session.pop(_SESSION_OCEAN_COLOUR, None)
     return redirect(url_for("main.index"))
 
 
@@ -114,6 +148,8 @@ def download() -> Response:
     raw_groups = session.get(_SESSION_LAST_GROUPS)
     map_key = session.get(_SESSION_MAP_KEY, DEFAULT_MAP)
     include_circles = bool(session.get(_SESSION_INCLUDE_CIRCLES, False))
+    land_colour = session.get(_SESSION_LAND_COLOUR, DEFAULT_LAND_COLOUR)
+    ocean_colour = session.get(_SESSION_OCEAN_COLOUR, DEFAULT_OCEAN_COLOUR)
     if not raw_groups:
         return Response("No generated map in session.", status=400)
 
@@ -123,7 +159,18 @@ def download() -> Response:
 
     try:
         groups = _build_groups(raw_groups)
-        svg = render_map(map_key, build_css(groups, include_small_country_circles=include_circles))
+        current_map = MAPS[map_key]
+        svg = render_map(
+            map_key,
+            build_css(
+                groups,
+                include_small_country_circles=include_circles,
+                land=land_colour,
+                ocean=ocean_colour,
+                land_classes=current_map.land_classes,
+                ocean_classes=current_map.ocean_classes,
+            ),
+        )
     except (KeyError, ValueError, TypeError):
         current_app.logger.exception("download: invalid session data")
         return Response("Stored map data is invalid; please regenerate.", status=400)
@@ -148,6 +195,23 @@ def _build_groups(raw_groups: list[dict[str, Any]]) -> list[Group]:
 
 def _default_form_state() -> list[dict[str, Any]]:
     return [{"index": i, "title": "", "colour": "", "countries": []} for i in range(2)]
+
+
+def _resolve_base_colours(form) -> tuple[str, str, list[str]]:
+    """Read land/ocean colour from ``form``, falling back to the global defaults.
+
+    Missing fields silently use the defaults; present-but-malformed values
+    accumulate in the returned errors list so the form re-renders with the
+    user's invalid input intact.
+    """
+    land = (form.get("land_colour") or "").strip() or DEFAULT_LAND_COLOUR
+    ocean = (form.get("ocean_colour") or "").strip() or DEFAULT_OCEAN_COLOUR
+    errors: list[str] = []
+    if not _COLOUR_RE.match(land):
+        errors.append("Land fill: colour must be in the form #rrggbb.")
+    if not _COLOUR_RE.match(ocean):
+        errors.append("Ocean fill: colour must be in the form #rrggbb.")
+    return land, ocean, errors
 
 
 def _parse_groups(form) -> list[dict[str, Any]]:

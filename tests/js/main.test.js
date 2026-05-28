@@ -17,6 +17,10 @@ const FIXTURE_HTML = `<!doctype html>
 <body>
     <form id="colouriser-form"
           data-default-colours='${JSON.stringify(PALETTE)}'
+          data-default-land-colour="#dddddd"
+          data-default-ocean-colour="#ffffff"
+          data-land-classes="landxx,circlexx"
+          data-ocean-classes="oceanxx"
           data-map-key="world">
         <div id="groups"></div>
         <button type="submit" id="generate-map" class="js-fallback">Generate map</button>
@@ -24,10 +28,19 @@ const FIXTURE_HTML = `<!doctype html>
     </form>
     <button id="add-group">+ Add group</button>
     <select id="base-map-select" name="map" form="colouriser-form">
-        <option value="world" selected>World</option>
-        <option value="world-compact">World (compact)</option>
+        <option value="world" selected data-land-classes="landxx,circlexx" data-ocean-classes="oceanxx">World</option>
+        <option value="world-compact" data-land-classes="landxx,circlexx" data-ocean-classes="oceanxx">World (compact)</option>
+        <option value="city-no-ocean" data-land-classes="landxx" data-ocean-classes="">City (no ocean)</option>
     </select>
     <input type="checkbox" id="toggle-circles" name="circles" form="colouriser-form" value="1" />
+    <div class="base-colour-row" id="land-colour-row">
+        <input type="color" id="land-colour" name="land_colour" form="colouriser-form" value="#dddddd" />
+        <button type="button" id="reset-land" class="js-only base-colour-reset" disabled>Reset</button>
+    </div>
+    <div class="base-colour-row" id="ocean-colour-row">
+        <input type="color" id="ocean-colour" name="ocean_colour" form="colouriser-form" value="#ffffff" />
+        <button type="button" id="reset-ocean" class="js-only base-colour-reset" disabled>Reset</button>
+    </div>
     <template id="group-template">
         <div class="group" data-index="__INDEX__">
             <input name="group[__INDEX__][title]" type="text" />
@@ -116,6 +129,50 @@ describe("buildCss", () => {
         const css = buildCss([{ title: "X", colour: "#ff0000", codes: ["se"] }]);
         expect(css).not.toContain("opacity");
     });
+
+    describe("base layers", () => {
+        it("emits a /* Land and small circles */ block when land + landClasses are supplied", () => {
+            const css = buildCss([], {
+                land: "#dddddd",
+                landClasses: ["landxx", "circlexx"],
+            });
+            expect(css).toContain("/* Land and small circles */");
+            expect(css).toContain(".landxx, .circlexx { fill: #dddddd; }");
+        });
+
+        it("emits an /* Oceans, seas, and large lakes */ block when ocean + oceanClasses are supplied", () => {
+            const css = buildCss([], {
+                ocean: "#0099ff",
+                oceanClasses: ["oceanxx"],
+            });
+            expect(css).toContain("/* Oceans, seas, and large lakes */");
+            expect(css).toContain(".oceanxx { fill: #0099ff; }");
+        });
+
+        it("skips the land block when landClasses is empty", () => {
+            const css = buildCss([], { land: "#dddddd", landClasses: [] });
+            expect(css).not.toContain("Land");
+        });
+
+        it("skips the ocean block when oceanClasses is null", () => {
+            const css = buildCss([], { ocean: "#ffffff", oceanClasses: null });
+            expect(css).not.toContain("Ocean");
+        });
+
+        it("emits base-layer blocks before group blocks", () => {
+            const css = buildCss(
+                [{ title: "Members", colour: "#ff0000", codes: ["se"] }],
+                {
+                    land: "#dddddd",
+                    landClasses: ["landxx"],
+                    ocean: "#ffffff",
+                    oceanClasses: ["oceanxx"],
+                },
+            );
+            expect(css.indexOf("/* Land")).toBeLessThan(css.indexOf("/* Members"));
+            expect(css.indexOf("/* Oceans")).toBeLessThan(css.indexOf("/* Members"));
+        });
+    });
 });
 
 describe("buildLegend", () => {
@@ -167,7 +224,11 @@ describe("createApp", () => {
             // 4th group wraps back to palette[0]
             app.addGroup();
 
-            const colourInputs = document.querySelectorAll('input[type="color"]');
+            // Scope to the groups container so the land/ocean base-colour
+            // pickers in the fixture don't get counted.
+            const colourInputs = document
+                .getElementById("groups")
+                .querySelectorAll('input[type="color"]');
             expect(colourInputs).toHaveLength(4);
             expect(colourInputs[0].value).toBe(PALETTE[0]);
             expect(colourInputs[1].value).toBe(PALETTE[1]);
@@ -364,6 +425,159 @@ describe("createApp", () => {
             // After the fetch settles, mapLoaded flips true and download re-enables.
             await flushMicrotasks();
             expect(document.getElementById("download-svg").disabled).toBe(false);
+        });
+    });
+
+    describe("base colour pickers", () => {
+        it("enables the Reset button when the picker value differs from the default", async () => {
+            const app = createApp();
+            app.init();
+            await flushMicrotasks();
+
+            const land = document.getElementById("land-colour");
+            const reset = document.getElementById("reset-land");
+            expect(reset.disabled).toBe(true);
+
+            land.value = "#112233";
+            land.dispatchEvent(new Event("change", { bubbles: true }));
+            expect(reset.disabled).toBe(false);
+        });
+
+        it("resets the picker back to the default and re-disables the button", async () => {
+            const app = createApp();
+            app.init();
+            await flushMicrotasks();
+
+            const land = document.getElementById("land-colour");
+            const reset = document.getElementById("reset-land");
+            land.value = "#112233";
+            land.dispatchEvent(new Event("change", { bubbles: true }));
+
+            reset.click();
+            expect(land.value).toBe("#dddddd");
+            expect(reset.disabled).toBe(true);
+        });
+
+        it("enables and resets the ocean picker like the land picker", async () => {
+            const app = createApp();
+            app.init();
+            await flushMicrotasks();
+
+            const ocean = document.getElementById("ocean-colour");
+            const reset = document.getElementById("reset-ocean");
+            expect(reset.disabled).toBe(true);
+
+            ocean.value = "#abcdef";
+            ocean.dispatchEvent(new Event("change", { bubbles: true }));
+            expect(reset.disabled).toBe(false);
+
+            reset.click();
+            expect(ocean.value).toBe("#ffffff");
+            expect(reset.disabled).toBe(true);
+        });
+
+        it("reads base classes from the form dataset when no map selector exists", async () => {
+            // Single-map mode renders no <select>; parseClassList must fall
+            // back to the form's data-*-classes. Remove the selector before
+            // createApp so the fallback branch is exercised.
+            document.getElementById("base-map-select").remove();
+            const app = createApp();
+            app.init();
+            await flushMicrotasks();
+
+            app.addGroup();
+            vi.useFakeTimers();
+            app.addGroup();
+            vi.runAllTimers();
+            vi.useRealTimers();
+
+            const style = document.getElementById("map-colouriser-style");
+            expect(style.textContent).toContain(".landxx, .circlexx { fill: #dddddd; }");
+            expect(style.textContent).toContain(".oceanxx { fill: #ffffff; }");
+        });
+
+        it("hides the ocean row when switching to a map with empty data-ocean-classes", async () => {
+            const app = createApp();
+            app.init();
+            await flushMicrotasks();
+
+            const oceanRow = document.getElementById("ocean-colour-row");
+            const landRow = document.getElementById("land-colour-row");
+            expect(oceanRow.style.display).not.toBe("none");
+            expect(landRow.style.display).not.toBe("none");
+
+            const mapSelect = document.getElementById("base-map-select");
+            mapSelect.value = "city-no-ocean";
+            mapSelect.dispatchEvent(new Event("change", { bubbles: true }));
+
+            expect(oceanRow.style.display).toBe("none");
+            expect(landRow.style.display).not.toBe("none");
+        });
+
+        it("emits the picker's current colour into the live preview", async () => {
+            const app = createApp();
+            app.init();
+            await flushMicrotasks();
+
+            // Override land — the preview should pick this up on next input event.
+            const land = document.getElementById("land-colour");
+            land.value = "#112233";
+            land.dispatchEvent(new Event("change", { bubbles: true }));
+
+            // Add a group so refreshOutputs has something to feed buildCss
+            // alongside the base-layer block, then flush the debounce.
+            app.addGroup();
+            vi.useFakeTimers();
+            app.addGroup();  // any state change schedules an update
+            vi.runAllTimers();
+            vi.useRealTimers();
+
+            const style = document.getElementById("map-colouriser-style");
+            expect(style.textContent).toContain(".landxx, .circlexx { fill: #112233; }");
+            expect(style.textContent).toContain(".oceanxx { fill: #ffffff; }");
+        });
+
+        it("preserves the picker value across map switches", async () => {
+            const app = createApp();
+            app.init();
+            await flushMicrotasks();
+
+            const land = document.getElementById("land-colour");
+            land.value = "#112233";
+            land.dispatchEvent(new Event("change", { bubbles: true }));
+
+            const mapSelect = document.getElementById("base-map-select");
+            mapSelect.value = "world-compact";
+            mapSelect.dispatchEvent(new Event("change", { bubbles: true }));
+
+            expect(land.value).toBe("#112233");
+            expect(document.getElementById("reset-land").disabled).toBe(false);
+        });
+
+        it("preserves the ocean value when its row is hidden then shown again", async () => {
+            // Distinct from the switch above: switching to city-no-ocean hides
+            // the ocean row (display:none). This pins that hiding and re-showing
+            // the row never clears the user's colour.
+            const app = createApp();
+            app.init();
+            await flushMicrotasks();
+
+            const ocean = document.getElementById("ocean-colour");
+            const oceanRow = document.getElementById("ocean-colour-row");
+            ocean.value = "#abcdef";
+            ocean.dispatchEvent(new Event("change", { bubbles: true }));
+
+            const mapSelect = document.getElementById("base-map-select");
+            mapSelect.value = "city-no-ocean";
+            mapSelect.dispatchEvent(new Event("change", { bubbles: true }));
+            expect(oceanRow.style.display).toBe("none");
+
+            mapSelect.value = "world";
+            mapSelect.dispatchEvent(new Event("change", { bubbles: true }));
+
+            expect(oceanRow.style.display).not.toBe("none");
+            expect(ocean.value).toBe("#abcdef");
+            expect(document.getElementById("reset-ocean").disabled).toBe(false);
         });
     });
 

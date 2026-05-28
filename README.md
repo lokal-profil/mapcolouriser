@@ -9,6 +9,7 @@ A small Flask web app that colours regions on a hardcoded SVG world map by user-
 - Client-side SVG download via Blob — no round-trip to the server.
 - JavaScript-disabled fallback: server-rendered result page with the same download.
 - Multiple base maps with a selector behind the "Advanced" disclosure.
+- Optional land and ocean base-colour pickers behind the "Advanced" disclosure, overriding the corresponding fills baked into each base SVG.
 - Optional small-country circles toggle (visible effect on compatible base maps).
 - Reset button to clear all groups and stored preferences.
 - Preferences persisted across sessions — live-preview toggle in localStorage; last-used map and groups in the Flask session.
@@ -51,10 +52,18 @@ pnpm test
 1. Drop a well-formed SVG in `static/`. Country paths must carry the lowercase ISO 3166-1 alpha-2 code as a CSS class. If the SVG lacks a `viewBox` but has `width`/`height` attributes, one is derived at request time — no manual `viewBox` needed.
 2. Add an entry to `MAPS` in `app/maps.py` — internal key → `MapInfo(filename=..., label=..., description=...)`. The `label` is shown in the "Advanced" base-map selector; the optional `description` becomes the option's hover tooltip.
 
+   Two optional fields control the base-colour pickers in the Advanced panel — each a tuple of CSS class names (no leading `.`), joined into a selector at render time:
+
+   - `land_classes` — class names targeted by the "Land fill" picker. Default: `("landxx", "circlexx")` → emits `.landxx, .circlexx { fill: …; }`. Set to `None` if the SVG has no land-equivalent class; the picker is hidden for that map.
+   - `ocean_classes` — class names targeted by the "Ocean fill" picker. Default: `("oceanxx",)`. Set to `None` if the SVG has no ocean; the picker is hidden for that map.
+
+   When the picker is visible, the chosen colour is **always** emitted as a CSS rule, overriding whatever fill the SVG ships natively. The shipped global defaults are `#dddddd` for land (the Tol "Muted" palette's "bad data" neutral) and `#ffffff` for ocean.
+
 ## Implementation notes
 
 - User CSS is appended as a `<style id="map-colouriser-style">` element just before the closing `</svg>`; the on-disk SVG file is never modified.
-- When only one map is registered, the "Advanced" disclosure shows just the small-country circles toggle (the base-map selector is omitted entirely).
+- User CSS wins the cascade because it's appended after the SVG's native `<style id="style_css_sheet">` block. In particular, the Advanced "Land fill" / "Ocean fill" pickers always override the base SVG's own land / ocean fills whenever the pickers are visible.
+- When only one map is registered, the "Advanced" disclosure shows just the small-country circles toggle and the base-colour pickers (the base-map selector is omitted entirely).
 
 ## Credits
 

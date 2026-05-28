@@ -9,10 +9,43 @@
                     Base map
                     <select name="map" id="base-map-select" form="colouriser-form">
                         {% for key, info in maps.items() %}
-                            <option value="{{ key }}"{% if key == map_key %} selected{% endif %}{% if info.description %} title="{{ info.description }}"{% endif %}>{{ info.label }}</option>
+                            {# data-*-classes carry each map's land/ocean class tuples to the
+                               client: the JS map-switch handler reads them to know which
+                               classes to write the base-colour fill against and whether to
+                               show each picker row. Empty string == the map opted out (None). #}
+                            <option value="{{ key }}"{% if key == map_key %} selected{% endif %}
+                                    data-land-classes="{{ info.land_classes | join(',') if info.land_classes else '' }}"
+                                    data-ocean-classes="{{ info.ocean_classes | join(',') if info.ocean_classes else '' }}"
+                                    {%- if info.description %} title="{{ info.description }}"{% endif %}>{{ info.label }}</option>
                         {% endfor %}
                     </select>
                 </label>
+                {% endif %}
+                {% if current_map.land_classes %}
+                <div class="base-colour-row" id="land-colour-row">
+                    <label for="land-colour">
+                        Land fill
+                        <input type="color" id="land-colour" name="land_colour"
+                               form="colouriser-form"
+                               value="{{ land_colour }}"
+                               pattern="{{ colour_pattern }}" />
+                    </label>
+                    <button type="button" id="reset-land" class="js-only base-colour-reset"
+                            {% if land_colour | lower == default_land_colour | lower %}disabled{% endif %}>↺ Reset</button>
+                </div>
+                {% endif %}
+                {% if current_map.ocean_classes %}
+                <div class="base-colour-row" id="ocean-colour-row">
+                    <label for="ocean-colour">
+                        Ocean fill
+                        <input type="color" id="ocean-colour" name="ocean_colour"
+                               form="colouriser-form"
+                               value="{{ ocean_colour }}"
+                               pattern="{{ colour_pattern }}" />
+                    </label>
+                    <button type="button" id="reset-ocean" class="js-only base-colour-reset"
+                            {% if ocean_colour | lower == default_ocean_colour | lower %}disabled{% endif %}>↺ Reset</button>
+                </div>
                 {% endif %}
                 <label class="circles-toggle" title="Only takes visible effect on compatible base maps.">
                     <input type="checkbox" name="circles" id="toggle-circles"
@@ -43,6 +76,10 @@
     <div class="layout">
         <form method="post" action="{{ url_for('main.generate') }}" id="colouriser-form"
               data-default-colours='{{ default_colours | tojson }}'
+              data-default-land-colour="{{ default_land_colour }}"
+              data-default-ocean-colour="{{ default_ocean_colour }}"
+              data-land-classes="{{ current_map.land_classes | join(',') if current_map.land_classes else '' }}"
+              data-ocean-classes="{{ current_map.ocean_classes | join(',') if current_map.ocean_classes else '' }}"
               data-map-key="{{ map_key }}">
             <div id="groups">
                 {% for group in groups %}
