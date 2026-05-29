@@ -48,24 +48,16 @@ _SESSION_OCEAN_COLOUR = "ocean_colour"
 
 @bp.get("/")
 def index() -> str:
-    session_map_key = session.get(_SESSION_MAP_KEY, DEFAULT_MAP)
-    map_key = session_map_key if session_map_key in MAPS else DEFAULT_MAP
     return render_template(
         "index.html",
-        countries=all_countries(),
-        groups=session.get(_SESSION_LAST_GROUPS) or _default_form_state(),
-        errors=[],
-        title_pattern=TITLE_PATTERN,
-        colour_pattern=COLOUR_PATTERN,
-        default_colours=DEFAULT_GROUP_COLOURS,
-        default_land_colour=DEFAULT_LAND_COLOUR,
-        default_ocean_colour=DEFAULT_OCEAN_COLOUR,
-        land_colour=session.get(_SESSION_LAND_COLOUR, DEFAULT_LAND_COLOUR),
-        ocean_colour=session.get(_SESSION_OCEAN_COLOUR, DEFAULT_OCEAN_COLOUR),
-        map_key=map_key,
-        current_map=MAPS[map_key],
-        maps=MAPS,
-        include_circles=bool(session.get(_SESSION_INCLUDE_CIRCLES, False)),
+        **_index_context(
+            groups=session.get(_SESSION_LAST_GROUPS) or _default_form_state(),
+            errors=[],
+            map_key=session.get(_SESSION_MAP_KEY, DEFAULT_MAP),
+            land_colour=session.get(_SESSION_LAND_COLOUR, DEFAULT_LAND_COLOUR),
+            ocean_colour=session.get(_SESSION_OCEAN_COLOUR, DEFAULT_OCEAN_COLOUR),
+            include_circles=bool(session.get(_SESSION_INCLUDE_CIRCLES, False)),
+        ),
     )
 
 
@@ -78,38 +70,20 @@ def generate() -> Response | str:
     errors = _validate(raw_groups, map_key) + base_errors
 
     if errors:
-        safe_key = map_key if map_key in MAPS else DEFAULT_MAP
         return render_template(
             "index.html",
-            countries=all_countries(),
-            groups=raw_groups or _default_form_state(),
-            errors=errors,
-            title_pattern=TITLE_PATTERN,
-            colour_pattern=COLOUR_PATTERN,
-            default_colours=DEFAULT_GROUP_COLOURS,
-            default_land_colour=DEFAULT_LAND_COLOUR,
-            default_ocean_colour=DEFAULT_OCEAN_COLOUR,
-            land_colour=land_colour,
-            ocean_colour=ocean_colour,
-            map_key=safe_key,
-            current_map=MAPS[safe_key],
-            maps=MAPS,
-            include_circles=include_circles,
+            **_index_context(
+                groups=raw_groups or _default_form_state(),
+                errors=errors,
+                map_key=map_key,
+                land_colour=land_colour,
+                ocean_colour=ocean_colour,
+                include_circles=include_circles,
+            ),
         )
 
     groups = _build_groups(raw_groups)
-    current_map = MAPS[map_key]
-    svg = render_map(
-        map_key,
-        build_css(
-            groups,
-            include_small_country_circles=include_circles,
-            land=land_colour,
-            ocean=ocean_colour,
-            land_classes=current_map.land_classes,
-            ocean_classes=current_map.ocean_classes,
-        ),
-    )
+    svg = _render_with_base(map_key, groups, include_circles, land_colour, ocean_colour)
     legend = build_legend(groups)
 
     session[_SESSION_MAP_KEY] = map_key
@@ -159,18 +133,7 @@ def download() -> Response:
 
     try:
         groups = _build_groups(raw_groups)
-        current_map = MAPS[map_key]
-        svg = render_map(
-            map_key,
-            build_css(
-                groups,
-                include_small_country_circles=include_circles,
-                land=land_colour,
-                ocean=ocean_colour,
-                land_classes=current_map.land_classes,
-                ocean_classes=current_map.ocean_classes,
-            ),
-        )
+        svg = _render_with_base(map_key, groups, include_circles, land_colour, ocean_colour)
     except (KeyError, ValueError, TypeError):
         current_app.logger.exception("download: invalid session data")
         return Response("Stored map data is invalid; please regenerate.", status=400)
@@ -180,6 +143,66 @@ def download() -> Response:
         mimetype="image/svg+xml",
         headers={"Content-Disposition": 'attachment; filename="map.svg"'},
     )
+
+
+def _render_with_base(
+    map_key: str,
+    groups: list[Group],
+    include_circles: bool,
+    land: str,
+    ocean: str,
+) -> str:
+    """Render ``map_key`` with the group + base-layer CSS injected.
+
+    Shared by ``/generate`` and ``/download`` so the two paths can't drift on
+    which CSS the base-colour pickers contribute.
+    """
+    current_map = MAPS[map_key]
+    return render_map(
+        map_key,
+        build_css(
+            groups,
+            include_small_country_circles=include_circles,
+            land=land,
+            ocean=ocean,
+            land_classes=current_map.land_classes,
+            ocean_classes=current_map.ocean_classes,
+        ),
+    )
+
+
+def _index_context(
+    *,
+    groups: list[dict[str, Any]],
+    errors: list[str],
+    map_key: str,
+    land_colour: str,
+    ocean_colour: str,
+    include_circles: bool,
+) -> dict[str, Any]:
+    """Build the shared template context for the index form.
+
+    Used by ``GET /`` and the ``POST /generate`` error re-render so the
+    (growing) kwarg set lives in one place. ``map_key`` is clamped to a known
+    map here, so callers may pass a raw session/form value.
+    """
+    safe_key = map_key if map_key in MAPS else DEFAULT_MAP
+    return {
+        "countries": all_countries(),
+        "groups": groups,
+        "errors": errors,
+        "title_pattern": TITLE_PATTERN,
+        "colour_pattern": COLOUR_PATTERN,
+        "default_colours": DEFAULT_GROUP_COLOURS,
+        "default_land_colour": DEFAULT_LAND_COLOUR,
+        "default_ocean_colour": DEFAULT_OCEAN_COLOUR,
+        "land_colour": land_colour,
+        "ocean_colour": ocean_colour,
+        "map_key": safe_key,
+        "current_map": MAPS[safe_key],
+        "maps": MAPS,
+        "include_circles": include_circles,
+    }
 
 
 def _build_groups(raw_groups: list[dict[str, Any]]) -> list[Group]:
