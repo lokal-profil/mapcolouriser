@@ -34,15 +34,17 @@ class MapInfo:
 
     ``land_classes`` / ``ocean_classes`` drive the Advanced-panel base-colour
     pickers: each is a tuple of CSS class names (no leading ``.``) joined into
-    a selector at build time. Set to ``None`` to opt a map out of the picker
-    entirely (the UI hides the row and no rule is emitted).
+    a selector at build time. Both default to ``None`` — a map opts *in* to a
+    picker by declaring the class names it should fill; leaving a side unset
+    hides that picker (the UI omits the row and no rule is emitted). Class
+    names are not inherited, so each map states the classes its own SVG uses.
     """
 
     filename: str
     label: str
     description: str = ""
-    land_classes: tuple[str, ...] | None = ("landxx", "circlexx")
-    ocean_classes: tuple[str, ...] | None = ("oceanxx",)
+    land_classes: tuple[str, ...] | None = None
+    ocean_classes: tuple[str, ...] | None = None
 
     def __post_init__(self) -> None:
         for field_name in ("land_classes", "ocean_classes"):
@@ -60,12 +62,15 @@ MAPS: dict[str, MapInfo] = {
     "world": MapInfo(
         filename="BlankMap-World.svg",
         label="World",
+        land_classes=("landxx", "circlexx"),
+        ocean_classes=("oceanxx",),
         description="A Robinson projection centered on the 0th meridian.",
     ),
     "world-compact": MapInfo(
         filename="BlankMap-World-Compact.svg",
         label="World (compact)",
         land_classes=("landxx", "circlexx", "limitxx"),
+        ocean_classes=("oceanxx",),
         description=(
             "A compact Robinson projection centered on the 0th meridian with Antarctica removed."
         ),

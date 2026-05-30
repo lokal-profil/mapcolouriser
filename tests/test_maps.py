@@ -125,18 +125,11 @@ class TestMapsRegistry:
 
 
 class TestMapInfoBaseClassFields:
-    def test_default_land_classes(self):
+    def test_class_fields_default_to_none(self):
+        # Classes are not inherited: an undeclared side opts out (no picker,
+        # no rule). A map opts in by naming its own SVG classes.
         info = MapInfo(filename="x.svg", label="X")
-        assert info.land_classes == ("landxx", "circlexx")
-
-    def test_default_ocean_classes(self):
-        info = MapInfo(filename="x.svg", label="X")
-        assert info.ocean_classes == ("oceanxx",)
-
-    def test_opt_out_with_none(self):
-        # A future map with no ocean equivalent declares ocean_classes=None;
-        # the picker hides and build_css skips the rule.
-        info = MapInfo(filename="x.svg", label="X", ocean_classes=None)
+        assert info.land_classes is None
         assert info.ocean_classes is None
 
     def test_empty_tuple_rejected(self):

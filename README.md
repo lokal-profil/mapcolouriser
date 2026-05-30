@@ -52,12 +52,12 @@ pnpm test
 1. Drop a well-formed SVG in `static/`. Country paths must carry the lowercase ISO 3166-1 alpha-2 code as a CSS class. If the SVG lacks a `viewBox` but has `width`/`height` attributes, one is derived at request time — no manual `viewBox` needed.
 2. Add an entry to `MAPS` in `app/maps.py` — internal key → `MapInfo(filename=..., label=..., description=...)`. The `label` is shown in the "Advanced" base-map selector; the optional `description` becomes the option's hover tooltip.
 
-   Two optional fields control the base-colour pickers in the Advanced panel — each a tuple of CSS class names (no leading `.`), joined into a selector at render time:
+   Two optional fields control the base-colour pickers in the Advanced panel — each a tuple of CSS class names (no leading `.`), joined into a selector at render time. **Both default to `None`** (no picker); class names are not inherited, so each map names the classes its own SVG uses:
 
-   - `land_classes` — class names targeted by the "Land fill" picker. Default: `("landxx", "circlexx")` → emits `.landxx, .circlexx { fill: …; }`. Set to `None` if the SVG has no land-equivalent class; the picker is hidden for that map.
-   - `ocean_classes` — class names targeted by the "Ocean fill" picker. Default: `("oceanxx",)`. Set to `None` if the SVG has no ocean; the picker is hidden for that map.
+   - `land_classes` — class names targeted by the "Land fill" picker, e.g. `("landxx", "circlexx")` → emits `.landxx, .circlexx { fill: …; }`. Omit (or `None`) if the SVG has no land-equivalent class; the picker is hidden for that map.
+   - `ocean_classes` — class names targeted by the "Ocean fill" picker, e.g. `("oceanxx",)`. Omit (or `None`) if the SVG has no ocean; the picker is hidden for that map.
 
-   When the picker is visible, the chosen colour is **always** emitted as a CSS rule, overriding whatever fill the SVG ships natively. The shipped global defaults are `#dddddd` for land (the Tol "Muted" palette's "bad data" neutral) and `#ffffff` for ocean.
+   Both shipped maps declare these explicitly. When a picker is shown, the chosen colour is **always** emitted as a CSS rule, overriding whatever fill the SVG ships natively. The default picker colours are `#dddddd` for land (the Tol "Muted" palette's "bad data" neutral) and `#ffffff` for ocean.
 
 ## Implementation notes
 
