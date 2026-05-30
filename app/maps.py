@@ -65,6 +65,7 @@ MAPS: dict[str, MapInfo] = {
     "world-compact": MapInfo(
         filename="BlankMap-World-Compact.svg",
         label="World (compact)",
+        land_classes=("landxx", "circlexx", "limitxx"),
         description=(
             "A compact Robinson projection centered on the 0th meridian with Antarctica removed."
         ),
