@@ -341,6 +341,30 @@ export function createApp(doc = document) {
         form.addEventListener("input", requestUpdate);
         form.addEventListener("change", requestUpdate);
 
+        // Firefox for Android runs constraint validation (the Generate submit
+        // is blocked, Download's reportValidity() returns false) but renders no
+        // message, no focus, and no scroll — Bugzilla 1510450 — so a failed
+        // submit looks completely inert. Rather than UA-sniff, probe the
+        // behaviour: working browsers (desktop Firefox, Chrome incl. Android,
+        // Safari) all move focus to the first invalid control during the native
+        // pass, so we only step in when that didn't happen. `invalid` fires on
+        // both the reportValidity() and native-submit paths and doesn't bubble
+        // — capture it; defer the focus check so the native report runs first.
+        form.addEventListener(
+            "invalid",
+            e => {
+                const firstInvalid = form.querySelector(":invalid");
+                if (e.target !== firstInvalid) return;
+                setTimeout(() => {
+                    if (doc.activeElement !== firstInvalid) {
+                        firstInvalid.scrollIntoView({ block: "center" });
+                        firstInvalid.focus({ preventScroll: true });
+                    }
+                }, 0);
+            },
+            true,
+        );
+
         if (toggleInput) {
             // Sync the checkbox to the FOUC-set html class — the hardcoded
             // `checked` HTML attribute may not match a stored "off" preference
