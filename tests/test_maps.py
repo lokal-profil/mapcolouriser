@@ -152,9 +152,3 @@ class TestMapInfoBaseClassFields:
         # _selector_from_classes at build time.
         with pytest.raises(ValueError, match="valid CSS class name"):
             MapInfo(filename="x.svg", label="X", land_classes=(".landxx",))
-
-    def test_world_compact_keeps_defaults(self):
-        # Both shipped maps share the canonical SVG class names today; the
-        # base-colour pickers must apply to either.
-        assert MAPS["world-compact"].land_classes == ("landxx", "circlexx")
-        assert MAPS["world-compact"].ocean_classes == ("oceanxx",)

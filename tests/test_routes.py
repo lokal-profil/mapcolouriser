@@ -1,5 +1,7 @@
 from html.parser import HTMLParser
 
+import pytest
+
 
 def _selected_options(html: str, select_name: str) -> set[str]:
     """Return the set of option values marked ``selected`` inside the named ``<select>``."""
@@ -360,14 +362,44 @@ class TestBaseColours:
     DEFAULT_LAND = "#dddddd"
     DEFAULT_OCEAN = "#ffffff"
 
-    # Default MapInfo land_classes / ocean_classes in the comma-joined form
-    # the template emits into the data-* attributes (the CSS-selector form,
-    # ".landxx, .circlexx", is asserted separately in test_colouriser.py).
-    LAND_CLASSES_ATTR = "landxx,circlexx"
-    OCEAN_CLASSES_ATTR = "oceanxx"
+    # A synthetic base map with test-owned class names ("landzz"/"circlezz" for
+    # land, "oceanzz" for ocean), injected by the autouse fixture and made the
+    # session's map, so assertions pin to values this class controls rather than
+    # the shipped maps' live class lists. Expected selectors/attributes are
+    # written as literals at each assertion.
+    MAP_KEY = "test-base-colours"
+
+    @pytest.fixture(autouse=True)
+    def _synthetic_map(self, client, monkeypatch):
+        """Register the synthetic map and make it the session's map for all
+        tests in this class.
+
+        Reuses world's on-disk SVG so render_map can prepare it; the declared
+        classes need not exist in that SVG (check_svg isn't run here). Opt-out
+        tests re-inject MAP_KEY with ocean_classes=None.
+        """
+        self._inject_map(client, monkeypatch)
+
+    def _inject_map(self, client, monkeypatch, *, ocean_classes=("oceanzz",)):
+        import app.maps as maps_module
+        from app.maps import MapInfo
+
+        monkeypatch.setitem(
+            maps_module.MAPS,
+            self.MAP_KEY,
+            MapInfo(
+                filename="BlankMap-World.svg",
+                label="Test base colours",
+                land_classes=("landzz", "circlezz"),
+                ocean_classes=ocean_classes,
+            ),
+        )
+        with client.session_transaction() as s:
+            s["map_key"] = self.MAP_KEY
 
     def _post_min(self, **extra):
         data = {
+            "map": self.MAP_KEY,
             "group[0][title]": "Members",
             "group[0][colour]": "#ff0000",
             "group[0][countries][]": ["se"],
@@ -384,9 +416,9 @@ class TestBaseColours:
         assert m, "user CSS style element missing"
         css = m.group(1)
         assert "/* Land and small circles */" in css
-        assert f".landxx, .circlexx {{ fill: {self.DEFAULT_LAND}; }}" in css
+        assert f".landzz, .circlezz {{ fill: {self.DEFAULT_LAND}; }}" in css
         assert "/* Oceans, seas, and large lakes */" in css
-        assert f".oceanxx {{ fill: {self.DEFAULT_OCEAN}; }}" in css
+        assert f".oceanzz {{ fill: {self.DEFAULT_OCEAN}; }}" in css
         # Omitted picker fields resolve to the defaults and persist as such.
         with client.session_transaction() as s:
             assert s["land_colour"] == self.DEFAULT_LAND
@@ -398,7 +430,7 @@ class TestBaseColours:
         resp = client.post("/generate", data=self._post_min(land_colour="#112233"))
         body = resp.get_data(as_text=True)
         m = re.search(r'<style id="map-colouriser-style">(.*?)</style>', body, re.DOTALL)
-        assert m and ".landxx, .circlexx { fill: #112233; }" in m.group(1)
+        assert m and ".landzz, .circlezz { fill: #112233; }" in m.group(1)
         with client.session_transaction() as s:
             assert s["land_colour"] == "#112233"
 
@@ -408,7 +440,7 @@ class TestBaseColours:
         resp = client.post("/generate", data=self._post_min(ocean_colour="#abcdef"))
         body = resp.get_data(as_text=True)
         m = re.search(r'<style id="map-colouriser-style">(.*?)</style>', body, re.DOTALL)
-        assert m and ".oceanxx { fill: #abcdef; }" in m.group(1)
+        assert m and ".oceanzz { fill: #abcdef; }" in m.group(1)
         with client.session_transaction() as s:
             assert s["ocean_colour"] == "#abcdef"
 
@@ -420,7 +452,7 @@ class TestBaseColours:
         resp = client.post("/generate", data=self._post_min(land_colour="#ABCDEF"))
         body = resp.get_data(as_text=True)
         m = re.search(r'<style id="map-colouriser-style">(.*?)</style>', body, re.DOTALL)
-        assert m and ".landxx, .circlexx { fill: #ABCDEF; }" in m.group(1)
+        assert m and ".landzz, .circlezz { fill: #ABCDEF; }" in m.group(1)
         with client.session_transaction() as s:
             assert s["land_colour"] == "#ABCDEF"
 
@@ -430,7 +462,7 @@ class TestBaseColours:
         resp = client.post("/generate", data=self._post_min(land_colour="   "))
         body = resp.get_data(as_text=True)
         m = re.search(r'<style id="map-colouriser-style">(.*?)</style>', body, re.DOTALL)
-        assert m and f".landxx, .circlexx {{ fill: {self.DEFAULT_LAND}; }}" in m.group(1)
+        assert m and f".landzz, .circlezz {{ fill: {self.DEFAULT_LAND}; }}" in m.group(1)
 
     def test_invalid_land_colour_rerenders_with_error(self, client):
         resp = client.post("/generate", data=self._post_min(land_colour="red"))
@@ -494,9 +526,9 @@ class TestBaseColours:
 
     def test_option_data_attributes_carry_classes(self, client):
         body = client.get("/").get_data(as_text=True)
-        # Both shipped maps share the canonical class names today.
-        assert f'data-land-classes="{self.LAND_CLASSES_ATTR}"' in body
-        assert f'data-ocean-classes="{self.OCEAN_CLASSES_ATTR}"' in body
+        # The synthetic map's <option> carries its declared classes, joined.
+        assert 'data-land-classes="landzz,circlezz"' in body
+        assert 'data-ocean-classes="oceanzz"' in body
 
     def test_form_data_attributes_expose_defaults_and_current_classes(self, client):
         import re
@@ -506,25 +538,13 @@ class TestBaseColours:
         assert m
         assert f'data-default-land-colour="{self.DEFAULT_LAND}"' in m.group(0)
         assert f'data-default-ocean-colour="{self.DEFAULT_OCEAN}"' in m.group(0)
-        assert f'data-land-classes="{self.LAND_CLASSES_ATTR}"' in m.group(0)
-        assert f'data-ocean-classes="{self.OCEAN_CLASSES_ATTR}"' in m.group(0)
+        assert 'data-land-classes="landzz,circlezz"' in m.group(0)
+        assert 'data-ocean-classes="oceanzz"' in m.group(0)
 
     def test_picker_row_hidden_server_side_when_map_opts_out(self, client, monkeypatch):
-        import app.maps as maps_module
-        from app.maps import MapInfo
-
-        # Reduce to a single map declaring no ocean, exercising the Jinja
-        # gate. Mutate the shared dict so routes.py's aliased MAPS sees it.
-        monkeypatch.delitem(maps_module.MAPS, "world-compact")
-        monkeypatch.setitem(
-            maps_module.MAPS,
-            "world",
-            MapInfo(
-                filename="BlankMap-World.svg",
-                label="World",
-                ocean_classes=None,
-            ),
-        )
+        # Re-inject the synthetic map with no ocean classes; the Jinja gate
+        # should then render the land row but not the ocean row.
+        self._inject_map(client, monkeypatch, ocean_classes=None)
         body = client.get("/").get_data(as_text=True)
         assert 'id="land-colour-row"' in body
         assert 'id="ocean-colour-row"' not in body
@@ -532,23 +552,11 @@ class TestBaseColours:
     def test_generate_skips_ocean_rule_when_map_opts_out(self, client, monkeypatch):
         import re
 
-        import app.maps as maps_module
-        from app.maps import MapInfo
-
-        monkeypatch.delitem(maps_module.MAPS, "world-compact")
-        monkeypatch.setitem(
-            maps_module.MAPS,
-            "world",
-            MapInfo(
-                filename="BlankMap-World.svg",
-                label="World",
-                ocean_classes=None,
-            ),
-        )
+        self._inject_map(client, monkeypatch, ocean_classes=None)
         resp = client.post("/generate", data=self._post_min(ocean_colour="#abcdef"))
         body = resp.get_data(as_text=True)
         m = re.search(r'<style id="map-colouriser-style">(.*?)</style>', body, re.DOTALL)
-        assert m and "oceanxx" not in m.group(1)
+        assert m and "oceanzz" not in m.group(1)
         # The opted-out side's colour is still persisted — session storage is
         # independent of whether a rule was emitted.
         with client.session_transaction() as s:
@@ -690,9 +698,24 @@ class TestDownload:
         assert resp.status_code == 400
         assert b"invalid" in resp.data.lower() or b"regenerate" in resp.data.lower()
 
-    def test_honours_session_base_colours(self, client):
+    def test_honours_session_base_colours(self, client, monkeypatch):
         import re
 
+        import app.maps as maps_module
+        from app.maps import MapInfo
+
+        # Synthetic map with test-owned classes so the assertion isn't coupled
+        # to a shipped map's live class list.
+        monkeypatch.setitem(
+            maps_module.MAPS,
+            "dl-base-colours",
+            MapInfo(
+                filename="BlankMap-World.svg",
+                label="DL base colours",
+                land_classes=("landzz", "circlezz"),
+                ocean_classes=("oceanzz",),
+            ),
+        )
         with client.session_transaction() as sess:
             sess["last_groups"] = [
                 {
@@ -702,7 +725,7 @@ class TestDownload:
                     "countries": ["se"],
                 }
             ]
-            sess["map_key"] = "world"
+            sess["map_key"] = "dl-base-colours"
             sess["land_colour"] = "#112233"
             sess["ocean_colour"] = "#abcdef"
         resp = client.get("/download")
@@ -710,8 +733,8 @@ class TestDownload:
         body = resp.data.decode("utf-8")
         m = re.search(r'<style id="map-colouriser-style">(.*?)</style>', body, re.DOTALL)
         assert m
-        assert ".landxx, .circlexx { fill: #112233; }" in m.group(1)
-        assert ".oceanxx { fill: #abcdef; }" in m.group(1)
+        assert ".landzz, .circlezz { fill: #112233; }" in m.group(1)
+        assert ".oceanzz { fill: #abcdef; }" in m.group(1)
 
     def test_returns_400_when_session_colour_is_malformed(self, client):
         # build_css re-validates the colour and raises ValueError, which the
