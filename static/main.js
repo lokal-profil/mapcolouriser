@@ -303,7 +303,10 @@ export function createApp(doc = document) {
         } catch (err) {
             console.warn("map-colouriser: failed to persist live-preview preference", err);
         }
-        if (enabled) refreshOutputs();
+        if (enabled) {
+            if (userStyleEl) refreshOutputs();
+            else initMap(mapKey); // no warm yet (started off, or dropped on an off-swap); initMap fires refreshOutputs
+        }
         updateActionState();
     }
 
@@ -397,7 +400,12 @@ export function createApp(doc = document) {
                 oceanClasses = parseClassList(d => d.oceanClasses);
                 setRowVisible(landColourRow, landClasses.length > 0);
                 setRowVisible(oceanColourRow, oceanClasses.length > 0);
-                initMap(mapKey);
+                // Fetch only while the preview is shown; while off, drop the
+                // warm (and cancel any in-flight one) so the next enable
+                // re-fetches the current map — base SVGs are HTTP-cached, so
+                // that's served from cache, not re-downloaded.
+                if (livePreviewEnabled) initMap(mapKey);
+                else { mapRequestSeq++; userStyleEl = null; }
             });
         }
         if (landColourInput && landResetBtn) {
@@ -460,7 +468,7 @@ export function createApp(doc = document) {
         }
 
         updateActionState();
-        initMap(mapKey);
+        if (livePreviewEnabled) initMap(mapKey);
     }
 
     return {

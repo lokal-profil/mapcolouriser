@@ -426,6 +426,26 @@ describe("createApp", () => {
             await flushMicrotasks();
             expect(document.getElementById("download-svg").disabled).toBe(false);
         });
+
+        it("defers the fetch on selector change while live preview is off", async () => {
+            document.documentElement.classList.remove("live-preview");
+            const app = createApp();
+            app.init();
+            await flushMicrotasks();
+
+            const mapSelect = document.getElementById("base-map-select");
+            mapSelect.value = "world-compact";
+            mapSelect.dispatchEvent(new Event("change", { bubbles: true }));
+            await flushMicrotasks();
+            // Off: the swap only records the selection, no fetch.
+            expect(globalThis.fetch).not.toHaveBeenCalled();
+
+            // Enabling fetches the now-current (swapped) map exactly once.
+            app.setLivePreviewEnabled(true);
+            await flushMicrotasks();
+            expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+            expect(globalThis.fetch).toHaveBeenLastCalledWith("/maps/world-compact.svg");
+        });
     });
 
     describe("base colour pickers", () => {
@@ -637,6 +657,21 @@ describe("createApp", () => {
             // Re-enable runs refreshOutputs, which picks up the new selection.
             expect(styleEl.textContent).not.toBe(before);
             expect(styleEl.textContent).toContain(".de");
+        });
+
+        it("defers the base-map fetch until first enable when started with live preview off", async () => {
+            document.documentElement.classList.remove("live-preview");
+            const app = createApp();
+            app.init();
+            await flushMicrotasks();
+            // init() skipped the eager initMap, so nothing was fetched.
+            expect(globalThis.fetch).not.toHaveBeenCalled();
+
+            // Enabling warms the base SVG via initMap (userStyleEl was null).
+            app.setLivePreviewEnabled(true);
+            await flushMicrotasks();
+            expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+            expect(document.getElementById("map-colouriser-style")).not.toBeNull();
         });
     });
 
