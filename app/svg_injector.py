@@ -8,7 +8,9 @@ from __future__ import annotations
 
 import logging
 import re
-from xml.etree import ElementTree
+
+from defusedxml import ElementTree
+from defusedxml.common import DefusedXmlException
 
 logger = logging.getLogger(__name__)
 
@@ -28,11 +30,16 @@ def validate_svg(svg_text: str) -> bool:
     downstream callers like ``app.maps._prepared`` can safely locate the
     final ``</svg>`` for CSS injection. Catches truncated, malformed, or
     non-SVG files before they reach request handling or the JS preview.
+
+    Parsing goes through ``defusedxml`` because this also validates untrusted
+    uploads on the import path; a malicious payload (billion-laughs, external
+    entities, DTD) raises ``DefusedXmlException`` — which does *not* subclass
+    ``ParseError`` — so both are caught and reported as invalid.
     """
     try:
         root = ElementTree.fromstring(svg_text)
-    except ElementTree.ParseError as exc:
-        logger.warning("SVG failed to parse as XML: %s", exc)
+    except (ElementTree.ParseError, DefusedXmlException) as exc:
+        logger.warning("SVG rejected: %s", exc)
         return False
     if root.tag not in ("svg", f"{{{_SVG_NS}}}svg"):
         return False

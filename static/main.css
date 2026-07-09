@@ -19,6 +19,9 @@ select[multiple] { min-height: 8rem; width: 100%; }
 .errors { background: #fdd; border: 1px solid #c00; padding: 0.75rem 1rem; border-radius: 4px; }
 .errors ul { margin: 0.25rem 0 0 1rem; padding: 0; }
 
+.warnings { background: #fff6e0; border: 1px solid #d0a020; padding: 0.75rem 1rem; border-radius: 4px; }
+.warnings ul { margin: 0.25rem 0 0 1rem; padding: 0; }
+
 button { cursor: pointer; padding: 0.4rem 0.8rem; }
 .actions { display: flex; gap: 0.5rem; margin-top: 1rem; align-items: center; flex-wrap: wrap; }
 

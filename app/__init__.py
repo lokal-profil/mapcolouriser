@@ -28,6 +28,10 @@ def create_app(secret_key: str | None = None) -> Flask:
     app.config["SECRET_KEY"] = (
         secret_key or os.environ.get("FLASK_SECRET_KEY") or secrets.token_urlsafe(32)
     )
+    # Cap uploads on the /import path. Base maps are ~1 MB and a generated file
+    # is base + CSS (~1 MB), so 2 MB is generous headroom; past it Flask raises
+    # 413 before the request reaches a handler.
+    app.config["MAX_CONTENT_LENGTH"] = 2 * 1024 * 1024
 
     # Primes the per-map cache and raises if a marker is missing.
     prime_caches()

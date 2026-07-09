@@ -9,6 +9,7 @@ authors = [
     { name = "Lokal_Profil" },
 ]
 dependencies = [
+    "defusedxml>=0.7",
     "flask>=3.0",
     "gunicorn>=21.0",
     "pycountry>=24.6.1",

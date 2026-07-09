@@ -1,11 +1,30 @@
+import io
 import re
 from html.parser import HTMLParser
 
 import pytest
+from markupsafe import escape
+
+from app.colouriser import Group, build_css
+from app.maps import MAPS, render_map
 
 # The injected user-CSS <style> element, capturing its body. The opening tag
 # carries attributes (id + data-map), so match up to the first '>'.
 _USER_STYLE_RE = re.compile(r'<style id="map-colouriser-style"[^>]*>(.*?)</style>', re.DOTALL)
+
+
+def _generated_svg(map_key="world", *, groups=None, circles=False, land=None, ocean=None):
+    """Build a downloadable SVG the way /generate does, for import round-trips."""
+    info = MAPS[map_key]
+    css = build_css(
+        groups or [Group("Members", "#ff0000", ("se",))],
+        include_small_country_circles=circles,
+        land=land,
+        ocean=ocean,
+        land_classes=info.land_classes,
+        ocean_classes=info.ocean_classes,
+    )
+    return render_map(map_key, css)
 
 
 def _selected_options(html: str, select_name: str) -> set[str]:
@@ -39,6 +58,12 @@ def _selected_options(html: str, select_name: str) -> set[str]:
     p = _Parser()
     p.feed(html)
     return p.selected
+
+
+def _group_title(html: str, index: int) -> str | None:
+    """Return the ``value`` of the title input for group ``index``, or None."""
+    m = re.search(rf'name="group\[{index}\]\[title\]".*?value="([^"]*)"', html, re.DOTALL)
+    return m.group(1) if m else None
 
 
 class TestIndex:
@@ -636,6 +661,108 @@ class TestReset:
         # No session set up — reset should still succeed.
         resp = client.post("/reset")
         assert resp.status_code == 302
+
+
+class TestImport:
+    def _post(self, client, svg_bytes, filename="map.svg"):
+        return client.post(
+            "/import",
+            data={"svg": (io.BytesIO(svg_bytes), filename)},
+            content_type="multipart/form-data",
+        )
+
+    def test_round_trips_state_into_session_and_form(self, client):
+        groups = [
+            Group("Nordics", "#ff0000", ("se", "no")),
+            Group("DACH", "#00ff00", ("de", "at")),
+        ]
+        svg = _generated_svg("world", groups=groups, circles=True, land="#abcdef", ocean="#123456")
+        resp = self._post(client, svg.encode("utf-8"))
+
+        assert resp.status_code == 302
+        assert resp.headers["Location"].endswith("/")
+
+        with client.session_transaction() as s:
+            assert s["map_key"] == "world"
+            assert s["include_circles"] is True
+            assert s["land_colour"] == "#abcdef"
+            assert s["ocean_colour"] == "#123456"
+            # Full dicts, so title↔colour↔countries coupling is asserted, not
+            # just that each value appears somewhere.
+            assert s["last_groups"] == [
+                {"index": 0, "title": "Nordics", "colour": "#ff0000", "countries": ["se", "no"]},
+                {"index": 1, "title": "DACH", "colour": "#00ff00", "countries": ["de", "at"]},
+            ]
+
+        body = client.get("/").get_data(as_text=True)
+        # Coupling survives into the rendered form: each group's title input and
+        # its selected countries share the same group index.
+        assert _group_title(body, 0) == "Nordics"
+        assert _selected_options(body, "group[0][countries][]") == {"se", "no"}
+        assert _group_title(body, 1) == "DACH"
+        assert _selected_options(body, "group[1][countries][]") == {"de", "at"}
+
+    def test_missing_data_map_surfaces_warning_and_defaults(self, client):
+        svg = _generated_svg("world", land="#abcdef").replace(' data-map="world"', "")
+        self._post(client, svg.encode("utf-8"))
+
+        body = client.get("/").get_data(as_text=True)
+        assert 'class="warnings"' in body
+        assert "data-map" in body
+        # Groups still recovered despite the base-map fallback.
+        assert 'value="Members"' in body
+
+    def test_no_file_reports_warning(self, client):
+        resp = client.post("/import", data={}, content_type="multipart/form-data")
+        assert resp.status_code == 302
+        body = client.get("/").get_data(as_text=True)
+        assert "No file was uploaded." in body
+
+    def test_warnings_are_cleared_after_one_render(self, client):
+        self._post(client, b"not an svg")
+        first = client.get("/").get_data(as_text=True)
+        assert 'class="warnings"' in first
+        # Warnings are popped, so a second GET is clean.
+        second = client.get("/").get_data(as_text=True)
+        assert 'class="warnings"' not in second
+
+    def test_oversized_upload_rejected_with_413(self, client):
+        oversized = b"<svg>" + b"a" * (2 * 1024 * 1024) + b"</svg>"
+        resp = self._post(client, oversized)
+        assert resp.status_code == 413
+
+    # Unknown country codes are absent here by construction: the selector
+    # regex only matches [\w-]+, so a "code" can never carry HTML
+    # metacharacters into a warning. Payloads must be well-formed XML to get
+    # past validate_svg — which is exactly the shape that would execute if it
+    # ever rendered unescaped.
+    @pytest.mark.parametrize(
+        ("css", "payload"),
+        [
+            pytest.param(
+                "\n/* <script>alert(1)</script> */\n.zz { fill: #332288; }\n",
+                "<script>alert(1)</script>",
+                id="title",
+            ),
+            pytest.param(
+                '\n/* T */\n.se { fill: <img src="x" onerror="alert(1)"/>; }\n',
+                '<img src="x" onerror="alert(1)"/>',
+                id="colour",
+            ),
+            pytest.param(
+                "\n/* T */\n.se { fill: #332288; }\n<script>alert(1)</script>\n",
+                "<script>alert(1)</script>",
+                id="unparsed-styling",
+            ),
+        ],
+    )
+    def test_warning_content_from_the_file_is_html_escaped(self, client, css, payload):
+        svg = render_map("world", css)
+        self._post(client, svg.encode("utf-8"))
+
+        body = client.get("/").get_data(as_text=True)
+        assert payload not in body
+        assert str(escape(payload)) in body
 
 
 class TestDownload:

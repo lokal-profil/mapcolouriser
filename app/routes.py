@@ -16,6 +16,7 @@ from flask import (
     url_for,
 )
 
+from app import svg_import
 from app.colouriser import (
     COLOUR_PATTERN,
     DEFAULT_GROUP_COLOURS,
@@ -44,6 +45,7 @@ _SESSION_LAST_GROUPS = "last_groups"
 _SESSION_INCLUDE_CIRCLES = "include_circles"
 _SESSION_LAND_COLOUR = "land_colour"
 _SESSION_OCEAN_COLOUR = "ocean_colour"
+_SESSION_IMPORT_WARNINGS = "import_warnings"
 
 
 @bp.get("/")
@@ -57,6 +59,7 @@ def index() -> str:
             land_colour=session.get(_SESSION_LAND_COLOUR, DEFAULT_LAND_COLOUR),
             ocean_colour=session.get(_SESSION_OCEAN_COLOUR, DEFAULT_OCEAN_COLOUR),
             include_circles=bool(session.get(_SESSION_INCLUDE_CIRCLES, False)),
+            warnings=session.pop(_SESSION_IMPORT_WARNINGS, []),
         ),
     )
 
@@ -103,6 +106,40 @@ def reset() -> Response:
     session.pop(_SESSION_INCLUDE_CIRCLES, None)
     session.pop(_SESSION_LAND_COLOUR, None)
     session.pop(_SESSION_OCEAN_COLOUR, None)
+    return redirect(url_for("main.index"))
+
+
+@bp.post("/import")
+def import_svg_route() -> Response:
+    """Recover form state from an uploaded, previously generated SVG.
+
+    Persists what was recovered to the session and redirects to ``GET /`` so
+    the form repopulates. Warnings (non-blocking) are stashed for that render.
+    """
+    file = request.files.get("svg")
+    if not file:
+        session[_SESSION_IMPORT_WARNINGS] = ["No file was uploaded."]
+        return redirect(url_for("main.index"))
+
+    result = svg_import.import_svg(
+        file.read().decode("utf-8", errors="replace"),
+        valid_codes=_VALID_CODES,
+    )
+
+    if result.groups:
+        session[_SESSION_LAST_GROUPS] = result.groups
+        session[_SESSION_MAP_KEY] = result.map_key
+        # Only overwrite land/ocean when a colour was actually recovered, so a
+        # fallback import doesn't clobber the user's current Advanced settings.
+        if result.land_colour:
+            session[_SESSION_LAND_COLOUR] = result.land_colour
+        if result.ocean_colour:
+            session[_SESSION_OCEAN_COLOUR] = result.ocean_colour
+        # Circles is CSS-intrinsic (independent of the base map), so restore it
+        # whenever any groups were recovered.
+        session[_SESSION_INCLUDE_CIRCLES] = result.include_circles
+
+    session[_SESSION_IMPORT_WARNINGS] = result.warnings
     return redirect(url_for("main.index"))
 
 
@@ -179,18 +216,22 @@ def _index_context(
     land_colour: str,
     ocean_colour: str,
     include_circles: bool,
+    warnings: list[str] | None = None,
 ) -> dict[str, Any]:
     """Build the shared template context for the index form.
 
     Used by ``GET /`` and the ``POST /generate`` error re-render so the
     (growing) kwarg set lives in one place. ``map_key`` is clamped to a known
-    map here, so callers may pass a raw session/form value.
+    map here, so callers may pass a raw session/form value. ``warnings`` is a
+    real key (default empty) so the ``/generate`` path never leaves the
+    template iterating an undefined value.
     """
     safe_key = map_key if map_key in MAPS else DEFAULT_MAP
     return {
         "countries": all_countries(),
         "groups": groups,
         "errors": errors,
+        "warnings": warnings or [],
         "title_pattern": TITLE_PATTERN,
         "colour_pattern": COLOUR_PATTERN,
         "default_colours": DEFAULT_GROUP_COLOURS,

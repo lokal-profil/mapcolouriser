@@ -38,7 +38,7 @@ class TestValidateSvg:
     def test_logs_parse_error_message(self, caplog):
         with caplog.at_level(logging.WARNING, logger="app.svg_injector"):
             validate_svg("<svg><unclosed></svg>")
-        assert any("failed to parse" in rec.message for rec in caplog.records)
+        assert any("SVG rejected" in rec.message for rec in caplog.records)
 
 
 class TestAddViewboxIfMissing:

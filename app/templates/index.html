@@ -73,6 +73,15 @@
         </div>
     {% endif %}
 
+    {% if warnings %}
+        <div class="warnings" role="status">
+            <strong>The import failed or was only partially successful:</strong>
+            <ul>
+                {% for warning in warnings %}<li>{{ warning }}</li>{% endfor %}
+            </ul>
+        </div>
+    {% endif %}
+
     <div class="layout">
         <form method="post" action="{{ url_for('main.generate') }}" id="colouriser-form"
               data-default-colours='{{ default_colours | tojson }}'
