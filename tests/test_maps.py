@@ -50,7 +50,7 @@ class TestPreparedSvg:
         assert "viewBox=" in prepared_svg("world")
 
     def test_contains_no_user_style_element(self):
-        assert '<style id="map-colouriser-style">' not in prepared_svg("world")
+        assert '<style id="map-colouriser-style"' not in prepared_svg("world")
 
     def test_ends_with_svg_close_tag(self):
         assert prepared_svg("world").rstrip().endswith("</svg>")
@@ -58,18 +58,24 @@ class TestPreparedSvg:
 
 class TestRenderMap:
     def test_inserts_user_style_element(self):
-        out = render_map("world", ".se { fill: #ff0000; }")
-        assert '<style id="map-colouriser-style">.se { fill: #ff0000; }</style>' in out
+        css = ".se { fill: #ff0000; }"
+        out = render_map("world", css)
+        assert f'<style id="map-colouriser-style" data-map="world">{css}</style>' in out
 
     def test_style_element_appears_before_closing_svg(self):
         out = render_map("world", ".se { fill: red; }")
-        style_idx = out.index('<style id="map-colouriser-style">')
+        style_idx = out.index('<style id="map-colouriser-style"')
         close_idx = out.rindex("</svg>")
         assert style_idx < close_idx
 
     def test_empty_css_still_produces_valid_element(self):
         out = render_map("world", "")
-        assert '<style id="map-colouriser-style"></style>' in out
+        assert '<style id="map-colouriser-style" data-map="world"></style>' in out
+
+    @pytest.mark.parametrize("key", list(MAPS))
+    def test_style_element_carries_data_map_marker(self, key):
+        out = render_map(key, ".se { fill: red; }")
+        assert f'<style id="map-colouriser-style" data-map="{key}">' in out
 
     def test_passes_through_multi_rule_css(self):
         css = ".se { fill: red; }\n\n.de { fill: blue; }"

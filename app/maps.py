@@ -113,9 +113,13 @@ def render_map(key: str, css: str) -> str:
     Caller must ensure ``css`` contains no ``</style>`` or ``</svg>`` substring;
     ``app.colouriser.build_css`` satisfies this because ``Group`` validation
     rejects ``<``, ``>``, ``/``, ``*`` and ``\\`` in titles.
+
+    The ``data-map`` attribute records which registry key produced this output —
+    inert metadata read back by the import path (``app.svg_import``), with no
+    visual effect and no risk of drifting out of sync with the CSS itself.
     """
     prefix, suffix = _prepared(key)
-    return f'{prefix}<style id="map-colouriser-style">{css}</style>{suffix}'
+    return f'{prefix}<style id="map-colouriser-style" data-map="{key}">{css}</style>{suffix}'
 
 
 def prepared_svg(key: str = DEFAULT_MAP) -> str:

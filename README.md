@@ -61,7 +61,7 @@ pnpm test
 
 ## Implementation notes
 
-- User CSS is appended as a `<style id="map-colouriser-style">` element just before the closing `</svg>`; the on-disk SVG file is never modified.
+- User CSS is appended as a `<style id="map-colouriser-style" data-map="…">` element just before the closing `</svg>`; the on-disk SVG file is never modified. The `data-map` attribute records which base map produced the file so it can later be re-imported.
 - User CSS wins the cascade because it's appended after the SVG's native `<style id="style_css_sheet">` block. In particular, the Advanced "Land fill" / "Ocean fill" pickers always override the base SVG's own land / ocean fills whenever the pickers are visible.
 - When only one map is registered, the "Advanced" disclosure shows just the small-country circles toggle and the base-colour pickers (the base-map selector is omitted entirely).
 

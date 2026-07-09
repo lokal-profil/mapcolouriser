@@ -1,6 +1,11 @@
+import re
 from html.parser import HTMLParser
 
 import pytest
+
+# The injected user-CSS <style> element, capturing its body. The opening tag
+# carries attributes (id + data-map), so match up to the first '>'.
+_USER_STYLE_RE = re.compile(r'<style id="map-colouriser-style"[^>]*>(.*?)</style>', re.DOTALL)
 
 
 def _selected_options(html: str, select_name: str) -> set[str]:
@@ -115,8 +120,6 @@ class TestIndex:
         assert "Show small-country circles" in body
         assert 'form="colouriser-form"' in body
         # Default state: unchecked.
-        import re
-
         m = re.search(r'<input[^>]*id="toggle-circles"[^>]*>', body)
         assert m and "checked" not in m.group(0)
 
@@ -124,14 +127,10 @@ class TestIndex:
         with client.session_transaction() as s:
             s["include_circles"] = True
         body = client.get("/").get_data(as_text=True)
-        import re
-
         m = re.search(r'<input[^>]*id="toggle-circles"[^>]*>', body)
         assert m and "checked" in m.group(0)
 
     def test_option_without_description_has_no_title_attr(self, client, monkeypatch):
-        import re
-
         import app.maps as maps_module
         from app.maps import MapInfo
 
@@ -174,7 +173,7 @@ class TestGenerate:
         assert "<svg" in body
         assert "#ff0000" in body
         # User CSS appended as a <style id="map-colouriser-style"> element.
-        assert '<style id="map-colouriser-style">' in body
+        assert '<style id="map-colouriser-style"' in body
 
     def test_renders_wikitext_legend_below_map(self, client):
         resp = client.post(
@@ -234,7 +233,6 @@ class TestGenerate:
             assert s["map_key"] == "world"
 
     def test_post_with_circles_checked_persists_and_adds_opacity(self, client):
-        import re
 
         resp = client.post(
             "/generate",
@@ -249,7 +247,7 @@ class TestGenerate:
         body = resp.get_data(as_text=True)
         # Inspect the injected user CSS specifically — the base SVG itself
         # contains example `opacity: 1` text in its source comments.
-        m = re.search(r'<style id="map-colouriser-style">(.*?)</style>', body, re.DOTALL)
+        m = _USER_STYLE_RE.search(body)
         assert m, "user CSS style element missing from response"
         assert "opacity: 1" in m.group(1)
         with client.session_transaction() as s:
@@ -272,7 +270,6 @@ class TestGenerate:
             assert s["include_circles"] is False
 
     def test_post_without_circles_field_omits_opacity(self, client):
-        import re
 
         resp = client.post(
             "/generate",
@@ -283,7 +280,7 @@ class TestGenerate:
             },
         )
         body = resp.get_data(as_text=True)
-        m = re.search(r'<style id="map-colouriser-style">(.*?)</style>', body, re.DOTALL)
+        m = _USER_STYLE_RE.search(body)
         assert m, "user CSS style element missing from response"
         assert "opacity" not in m.group(1)
         with client.session_transaction() as s:
@@ -408,11 +405,10 @@ class TestBaseColours:
         return data
 
     def test_defaults_emitted_when_form_omits_picker_values(self, client):
-        import re
 
         resp = client.post("/generate", data=self._post_min())
         body = resp.get_data(as_text=True)
-        m = re.search(r'<style id="map-colouriser-style">(.*?)</style>', body, re.DOTALL)
+        m = _USER_STYLE_RE.search(body)
         assert m, "user CSS style element missing"
         css = m.group(1)
         assert "/* Land and small circles */" in css
@@ -425,43 +421,39 @@ class TestBaseColours:
             assert s["ocean_colour"] == self.DEFAULT_OCEAN
 
     def test_custom_land_persists_in_session_and_rendered_svg(self, client):
-        import re
 
         resp = client.post("/generate", data=self._post_min(land_colour="#112233"))
         body = resp.get_data(as_text=True)
-        m = re.search(r'<style id="map-colouriser-style">(.*?)</style>', body, re.DOTALL)
+        m = _USER_STYLE_RE.search(body)
         assert m and ".landzz, .circlezz { fill: #112233; }" in m.group(1)
         with client.session_transaction() as s:
             assert s["land_colour"] == "#112233"
 
     def test_custom_ocean_persists_in_session_and_rendered_svg(self, client):
-        import re
 
         resp = client.post("/generate", data=self._post_min(ocean_colour="#abcdef"))
         body = resp.get_data(as_text=True)
-        m = re.search(r'<style id="map-colouriser-style">(.*?)</style>', body, re.DOTALL)
+        m = _USER_STYLE_RE.search(body)
         assert m and ".oceanzz { fill: #abcdef; }" in m.group(1)
         with client.session_transaction() as s:
             assert s["ocean_colour"] == "#abcdef"
 
     def test_uppercase_hex_colour_round_trips(self, client):
-        import re
 
         # _COLOUR_RE accepts A-F; the value must survive case-intact into both
         # the rendered CSS and the session.
         resp = client.post("/generate", data=self._post_min(land_colour="#ABCDEF"))
         body = resp.get_data(as_text=True)
-        m = re.search(r'<style id="map-colouriser-style">(.*?)</style>', body, re.DOTALL)
+        m = _USER_STYLE_RE.search(body)
         assert m and ".landzz, .circlezz { fill: #ABCDEF; }" in m.group(1)
         with client.session_transaction() as s:
             assert s["land_colour"] == "#ABCDEF"
 
     def test_whitespace_colour_resolves_to_default(self, client):
-        import re
 
         resp = client.post("/generate", data=self._post_min(land_colour="   "))
         body = resp.get_data(as_text=True)
-        m = re.search(r'<style id="map-colouriser-style">(.*?)</style>', body, re.DOTALL)
+        m = _USER_STYLE_RE.search(body)
         assert m and f".landzz, .circlezz {{ fill: {self.DEFAULT_LAND}; }}" in m.group(1)
 
     def test_invalid_land_colour_rerenders_with_error(self, client):
@@ -480,8 +472,6 @@ class TestBaseColours:
         assert "ocean fill" in body and "#rrggbb" in body
 
     def test_index_reflects_session_land_colour_in_picker_value(self, client):
-        import re
-
         with client.session_transaction() as s:
             s["land_colour"] = "#112233"
         body = client.get("/").get_data(as_text=True)
@@ -489,8 +479,6 @@ class TestBaseColours:
         assert m and 'value="#112233"' in m.group(0)
 
     def test_index_reflects_session_ocean_colour_in_picker_value(self, client):
-        import re
-
         with client.session_transaction() as s:
             s["ocean_colour"] = "#abcdef"
         body = client.get("/").get_data(as_text=True)
@@ -498,15 +486,11 @@ class TestBaseColours:
         assert m and 'value="#abcdef"' in m.group(0)
 
     def test_reset_button_disabled_when_picker_at_default(self, client):
-        import re
-
         body = client.get("/").get_data(as_text=True)
         m = re.search(r'<button[^>]*id="reset-land"[^>]*>', body)
         assert m and "disabled" in m.group(0)
 
     def test_reset_button_disabled_for_uppercase_default(self, client):
-        import re
-
         # The template compares via `| lower`, so #DDDDDD must count as the
         # default and leave Reset disabled.
         with client.session_transaction() as s:
@@ -516,8 +500,6 @@ class TestBaseColours:
         assert m and "disabled" in m.group(0)
 
     def test_reset_button_enabled_when_picker_overridden(self, client):
-        import re
-
         with client.session_transaction() as s:
             s["land_colour"] = "#112233"
         body = client.get("/").get_data(as_text=True)
@@ -531,8 +513,6 @@ class TestBaseColours:
         assert 'data-ocean-classes="oceanzz"' in body
 
     def test_form_data_attributes_expose_defaults_and_current_classes(self, client):
-        import re
-
         body = client.get("/").get_data(as_text=True)
         m = re.search(r'<form[^>]*id="colouriser-form"[^>]*>', body)
         assert m
@@ -550,12 +530,11 @@ class TestBaseColours:
         assert 'id="ocean-colour-row"' not in body
 
     def test_generate_skips_ocean_rule_when_map_opts_out(self, client, monkeypatch):
-        import re
 
         self._inject_map(client, monkeypatch, ocean_classes=None)
         resp = client.post("/generate", data=self._post_min(ocean_colour="#abcdef"))
         body = resp.get_data(as_text=True)
-        m = re.search(r'<style id="map-colouriser-style">(.*?)</style>', body, re.DOTALL)
+        m = _USER_STYLE_RE.search(body)
         assert m and "oceanzz" not in m.group(1)
         # The opted-out side's colour is still persisted — session storage is
         # independent of whether a rule was emitted.
@@ -605,7 +584,7 @@ class TestBaseMapEndpoint:
         # viewBox enrichment is applied; the prepared SVG carries no user CSS
         # (the client-side preview appends its own <style id="map-colouriser-style">).
         assert "viewBox=" in body
-        assert '<style id="map-colouriser-style">' not in body
+        assert '<style id="map-colouriser-style"' not in body
 
     def test_returns_404_for_unknown_key(self, client):
         resp = client.get("/maps/atlantis.svg")
@@ -699,7 +678,6 @@ class TestDownload:
         assert b"invalid" in resp.data.lower() or b"regenerate" in resp.data.lower()
 
     def test_honours_session_base_colours(self, client, monkeypatch):
-        import re
 
         import app.maps as maps_module
         from app.maps import MapInfo
@@ -731,7 +709,7 @@ class TestDownload:
         resp = client.get("/download")
         assert resp.status_code == 200
         body = resp.data.decode("utf-8")
-        m = re.search(r'<style id="map-colouriser-style">(.*?)</style>', body, re.DOTALL)
+        m = _USER_STYLE_RE.search(body)
         assert m
         assert ".landzz, .circlezz { fill: #112233; }" in m.group(1)
         assert ".oceanzz { fill: #abcdef; }" in m.group(1)

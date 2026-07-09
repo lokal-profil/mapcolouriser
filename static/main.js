@@ -246,6 +246,7 @@ export function createApp(doc = document) {
                 previewContainer.replaceChildren(svg);
                 userStyleEl = doc.createElementNS("http://www.w3.org/2000/svg", "style");
                 userStyleEl.id = "map-colouriser-style";
+                userStyleEl.setAttribute("data-map", key);
                 svg.appendChild(userStyleEl);
                 mapLoaded = true;
                 refreshOutputs();

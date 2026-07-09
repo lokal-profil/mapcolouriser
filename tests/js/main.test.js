@@ -356,6 +356,8 @@ describe("createApp", () => {
             expect(styleEl).not.toBeNull();
             // Style element lives inside the SVG, not loose in the document.
             expect(styleEl.parentElement).toBe(previewSvg);
+            // Carries the base-map marker so a Blob download is re-importable.
+            expect(styleEl.getAttribute("data-map")).toBe("world");
             // Content reflects the selected code (verifies the cross-document
             // doc.createElementNS binding works end-to-end).
             expect(styleEl.textContent).toMatch(/\.se \{ fill: #/);
