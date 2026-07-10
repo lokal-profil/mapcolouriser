@@ -30,7 +30,7 @@
                                value="{{ land_colour }}"
                                pattern="{{ colour_pattern }}" />
                     </label>
-                    <button type="button" id="reset-land" class="js-only base-colour-reset"
+                    <button type="button" id="reset-land" class="js-only base-colour-reset btn-quiet btn-destructive"
                             {% if land_colour | lower == default_land_colour | lower %}disabled{% endif %}>↺ Reset</button>
                 </div>
                 {% endif %}
@@ -43,7 +43,7 @@
                                value="{{ ocean_colour }}"
                                pattern="{{ colour_pattern }}" />
                     </label>
-                    <button type="button" id="reset-ocean" class="js-only base-colour-reset"
+                    <button type="button" id="reset-ocean" class="js-only base-colour-reset btn-quiet btn-destructive"
                             {% if ocean_colour | lower == default_ocean_colour | lower %}disabled{% endif %}>↺ Reset</button>
                 </div>
                 {% endif %}
@@ -66,7 +66,7 @@
                            aria-label="SVG file" required />
                     {# Enabled in the no-JS baseline ("required" already blocks empty
                        submits); JS disables it until a file is picked. #}
-                    <button type="submit" id="import-submit">Import</button>
+                    <button type="submit" id="import-submit" class="btn-progressive">Import</button>
                 </form>
             </div>
         </details>
@@ -135,25 +135,26 @@
                             </select>
                         </label>
                         <div class="actions">
-                            <button type="button" class="remove-group">Remove group</button>
+                            <button type="button" class="remove-group btn-quiet btn-destructive">Remove group</button>
                         </div>
                     </div>
                 {% endfor %}
             </div>
 
             <div class="actions">
-                <button type="button" id="add-group">+ Add group</button>
-                <button type="submit" id="generate-map" class="js-fallback">Generate map</button>
-                <button type="submit" id="reset-groups"
+                {# Codex ordering: most important action last, destructive first. #}
+                <button type="submit" id="reset-groups" class="btn-destructive"
                         formaction="{{ url_for('main.reset') }}"
                         formnovalidate>Reset</button>
+                <button type="button" id="add-group">+ Add group</button>
+                <button type="submit" id="generate-map" class="js-fallback btn-primary btn-progressive">Generate map</button>
             </div>
         </form>
 
         <aside class="preview-pane">
             <div id="map-preview" class="preview"></div>
             <div class="actions">
-                <button type="button" id="download-svg" class="js-live">Download SVG</button>
+                <button type="button" id="download-svg" class="js-live btn-primary btn-progressive">Download SVG</button>
             </div>
             <details id="legend-box">
                 <summary>Wikitext legend</summary>
@@ -189,7 +190,7 @@
                 </select>
             </label>
             <div class="actions">
-                <button type="button" class="remove-group">Remove group</button>
+                <button type="button" class="remove-group btn-quiet btn-destructive">Remove group</button>
             </div>
         </div>
     </template>

@@ -22,7 +22,53 @@ select[multiple] { min-height: 8rem; width: 100%; }
 .warnings { background: #fff6e0; border: 1px solid #d0a020; padding: 0.75rem 1rem; border-radius: 4px; }
 .warnings ul { margin: 0.25rem 0 0 1rem; padding: 0; }
 
-button { cursor: pointer; padding: 0.4rem 0.8rem; }
+/* Buttons follow the Codex style guide (doc.wikimedia.org/codex): one primary
+   progressive action per view; framed neutral for secondary actions; quiet for
+   tertiary. Progressive marks actions that produce output (Generate, Download,
+   Import); destructive (red) marks actions that discard user input (Reset,
+   Remove group). Colour values are Codex design tokens, named in comments.
+   `.btn` lets a download link wear the same styling (the Codex-sanctioned
+   exception for high-emphasis actions). */
+button, .btn {
+    cursor: pointer;
+    display: inline-block;
+    padding: 0.4rem 0.8rem;
+    background: #f8f9fa;        /* background-color-interactive-subtle */
+    border: 1px solid #a2a9b1;  /* border-color-base */
+    border-radius: 2px;
+    color: #202122;             /* color-base */
+    font: inherit;
+    font-weight: 700;
+    text-decoration: none;
+}
+button:hover, .btn:hover { background: #eaecf0; }  /* interactive-subtle--hover */
+button:active, .btn:active { background: #dadde3; } /* interactive-subtle--active */
+button:focus-visible, .btn:focus-visible { outline: 2px solid #36c; outline-offset: 1px; }
+
+.btn-progressive { color: #36c; }           /* color-progressive */
+.btn-progressive:hover { color: #3056a9; }
+.btn-progressive:active { color: #233566; }
+
+.btn-destructive { color: #bf3c2c; }        /* color-destructive */
+.btn-destructive:hover { color: #9f3526; }
+.btn-destructive:active { color: #612419; }
+
+.btn-primary.btn-progressive { background: #36c; border-color: #36c; color: #fff; }
+.btn-primary.btn-progressive:hover { background: #3056a9; border-color: #3056a9; color: #fff; }
+.btn-primary.btn-progressive:active { background: #233566; border-color: #233566; color: #fff; }
+
+.btn-quiet { background: transparent; border-color: transparent; }
+.btn-quiet:hover { background: rgba(0, 24, 73, 0.027); }  /* button-quiet--hover */
+.btn-quiet:active { background: rgba(0, 24, 73, 0.082); } /* button-quiet--active */
+
+/* Framed disabled state (kept last so it wins ties with hover/active rules). */
+button:disabled, .btn-progressive:disabled, .btn-destructive:disabled, .btn-primary:disabled {
+    background: #dadde3;  /* background-color-disabled */
+    border-color: #dadde3;
+    color: #fff;
+    cursor: default;
+}
+.btn-quiet:disabled { background: transparent; border-color: transparent; color: #a2a9b1; }
 .actions { display: flex; gap: 0.5rem; margin-top: 1rem; align-items: center; flex-wrap: wrap; }
 
 .preview { border: 1px solid #ccc; padding: 0.5rem; margin-top: 1rem; }
@@ -45,9 +91,20 @@ button { cursor: pointer; padding: 0.4rem 0.8rem; }
 
 .import-form { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
 .import-hint { margin: 0; max-width: 24rem; color: #666; font-size: 0.85rem; }
-/* Match the native file-picker's browse button to the page's real buttons. */
-#import-file::file-selector-button { cursor: pointer; padding: 0.4rem 0.8rem; font: inherit; margin-right: 0.5rem; }
-#import-submit[disabled] { opacity: 0.4; cursor: default; }
+/* Match the native file-picker's browse button to the page's real buttons
+   (Codex normal neutral). */
+#import-file::file-selector-button {
+    cursor: pointer;
+    padding: 0.4rem 0.8rem;
+    background: #f8f9fa;
+    border: 1px solid #a2a9b1;
+    border-radius: 2px;
+    color: #202122;
+    font: inherit;
+    font-weight: 700;
+    margin-right: 0.5rem;
+}
+#import-file:hover::file-selector-button { background: #eaecf0; }
 .advanced-settings-panel {
     /* Floats below the summary instead of pushing the page down,
        so opening the panel doesn't shift the preview map. Anchored to
@@ -92,7 +149,6 @@ button { cursor: pointer; padding: 0.4rem 0.8rem; }
 .base-colour-row label { flex: 1; justify-content: space-between; padding-right: 2em; }
 .base-colour-row input[type="color"] { width: 2.5rem; height: 1.6rem; padding: 0; border: 1px solid #ccc; }
 .base-colour-reset { font-size: 0.9rem; padding: 0.2rem 0.5rem; }
-.base-colour-reset[disabled] { opacity: 0.4; cursor: default; }
 
 .live-preview-toggle { display: inline-flex; gap: 0.3rem; align-items: center; cursor: pointer; }
 .circles-toggle { cursor: pointer; }

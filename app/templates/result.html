@@ -4,9 +4,9 @@
         <a href="{{ url_for('main.index') }}">&larr; Back to form</a>
     </p>
     <div class="actions">
-        <a href="{{ url_for('main.download') }}">
-            <button type="button">Download SVG</button>
-        </a>
+        {# A link (it navigates to /download) wearing button styling — the
+           Codex-sanctioned exception for high-emphasis actions. #}
+        <a href="{{ url_for('main.download') }}" class="btn btn-primary btn-progressive">Download SVG</a>
     </div>
     <div class="preview">
         {{ svg | safe }}
