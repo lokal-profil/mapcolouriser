@@ -764,6 +764,14 @@ class TestImport:
         assert payload not in body
         assert str(escape(payload)) in body
 
+    def test_index_renders_import_form(self, client):
+        body = client.get("/").get_data(as_text=True)
+        m = re.search(r'<form[^>]*action="/import"[^>]*>', body)
+        assert m is not None
+        assert 'enctype="multipart/form-data"' in m.group(0)
+        assert 'method="post"' in m.group(0)
+        assert re.search(r'<input[^>]*type="file"[^>]*name="svg"', body)
+
 
 class TestDownload:
     def test_returns_400_when_no_session(self, client):

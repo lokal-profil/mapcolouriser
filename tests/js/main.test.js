@@ -53,6 +53,10 @@ const FIXTURE_HTML = `<!doctype html>
     </template>
     <div id="map-preview"></div>
     <input id="toggle-live-preview" type="checkbox" checked />
+    <form class="import-form">
+        <input type="file" id="import-file" name="svg" required />
+        <button type="submit" id="import-submit">Import</button>
+    </form>
     <button id="download-svg" disabled></button>
     <textarea id="legend-output"></textarea>
     <button id="copy-legend"></button>
@@ -447,6 +451,31 @@ describe("createApp", () => {
             await flushMicrotasks();
             expect(globalThis.fetch).toHaveBeenCalledTimes(1);
             expect(globalThis.fetch).toHaveBeenLastCalledWith("/maps/world-compact.svg");
+        });
+    });
+
+    describe("import form", () => {
+        it("disables the Import button until a file is chosen", async () => {
+            const app = createApp();
+            app.init();
+            await flushMicrotasks();
+
+            const fileInput = document.getElementById("import-file");
+            const submitBtn = document.getElementById("import-submit");
+            // init() disables the (no-JS-enabled) button while no file is set.
+            expect(submitBtn.disabled).toBe(true);
+
+            // jsdom offers no picker UI; install a FileList-shaped value directly.
+            Object.defineProperty(fileInput, "files", {
+                configurable: true,
+                value: [new File(["<svg/>"], "map.svg", { type: "image/svg+xml" })],
+            });
+            fileInput.dispatchEvent(new Event("change", { bubbles: true }));
+            expect(submitBtn.disabled).toBe(false);
+
+            Object.defineProperty(fileInput, "files", { configurable: true, value: [] });
+            fileInput.dispatchEvent(new Event("change", { bubbles: true }));
+            expect(submitBtn.disabled).toBe(true);
         });
     });
 

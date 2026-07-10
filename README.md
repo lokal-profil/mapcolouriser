@@ -12,6 +12,7 @@ A small Flask web app that colours regions on a hardcoded SVG world map by user-
 - Optional land and ocean base-colour pickers behind the "Advanced" disclosure, overriding the corresponding fills baked into each base SVG.
 - Optional small-country circles toggle (visible effect on compatible base maps).
 - Reset button to clear all groups and stored preferences.
+- Re-import a previously generated SVG to restore its groups, base map, land/ocean colours, and circles setting.
 - Preferences persisted across sessions — live-preview toggle in localStorage; last-used map and groups in the Flask session.
 
 ## Quick start

@@ -40,7 +40,14 @@ button { cursor: pointer; padding: 0.4rem 0.8rem; }
 
 .header-actions { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
 
-.advanced-settings summary { cursor: pointer; }
+.advanced-settings summary,
+#import-box summary { cursor: pointer; }
+
+.import-form { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
+.import-hint { margin: 0; max-width: 24rem; color: #666; font-size: 0.85rem; }
+/* Match the native file-picker's browse button to the page's real buttons. */
+#import-file::file-selector-button { cursor: pointer; padding: 0.4rem 0.8rem; font: inherit; margin-right: 0.5rem; }
+#import-submit[disabled] { opacity: 0.4; cursor: default; }
 .advanced-settings-panel {
     /* Floats below the summary instead of pushing the page down,
        so opening the panel doesn't shift the preview map. Anchored to

@@ -75,6 +75,8 @@ export function createApp(doc = document) {
     const oceanColourInput = doc.getElementById("ocean-colour");
     const oceanResetBtn = doc.getElementById("reset-ocean");
     const oceanColourRow = doc.getElementById("ocean-colour-row");
+    const importFileInput = doc.getElementById("import-file");
+    const importSubmitBtn = doc.getElementById("import-submit");
 
     if (!form || !groupsContainer || !addBtn || !tmpl) {
         // Unreachable in production (the template ships all four IDs). Logged
@@ -458,6 +460,17 @@ export function createApp(doc = document) {
             if (e.submitter && e.submitter.id === "reset-groups") return;
             if (livePreviewEnabled) e.preventDefault();
         });
+
+        if (importFileInput && importSubmitBtn) {
+            // Disabled until a file is picked. The initial state reads
+            // files.length (not a bare `true`) so a bfcache restore with a
+            // still-selected file keeps the button usable.
+            const syncImportState = () => {
+                importSubmitBtn.disabled = importFileInput.files.length === 0;
+            };
+            importFileInput.addEventListener("change", syncImportState);
+            syncImportState();
+        }
 
         const resetBtn = doc.getElementById("reset-groups");
         if (resetBtn) {
