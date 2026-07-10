@@ -11,6 +11,12 @@
 // Exported as an ES module: index.html loads it with <script type="module">
 // and calls `createApp().init()`. Tests import the pure helpers and the
 // factory directly without triggering DOM side effects.
+//
+// Each group's country <select multiple> is progressively enhanced into a
+// chips-and-lookup widget (country_multiselect.js); the hidden select stays
+// the source of truth for form submission and getGroupState().
+
+import { createCountryMultiselect } from "./country_multiselect.js";
 
 export function buildCss(state, {
     includeCircles = false,
@@ -174,12 +180,21 @@ export function createApp(doc = document) {
         }
     }
 
+    function enhanceCountrySelects() {
+        // Idempotent (createCountryMultiselect skips already-enhanced
+        // selects), so a blanket re-scan after every addGroup is safe.
+        groupsContainer.querySelectorAll('select[name$="[countries][]"]').forEach(sel => {
+            createCountryMultiselect(sel, doc);
+        });
+    }
+
     function addGroup() {
         const idx = nextIndex();
         const fragment = tmpl.content.cloneNode(true);
         patchPlaceholders(fragment, idx);
         applyDefaultColour(fragment, idx);
         groupsContainer.appendChild(fragment);
+        enhanceCountrySelects();
         updateActionState();
         requestUpdate();
     }
@@ -333,6 +348,10 @@ export function createApp(doc = document) {
     }
 
     function init() {
+        // Server-rendered groups (session restore, import, validation
+        // re-render) arrive as plain selects — enhance them first.
+        enhanceCountrySelects();
+
         addBtn.addEventListener("click", addGroup);
 
         groupsContainer.addEventListener("click", function (e) {

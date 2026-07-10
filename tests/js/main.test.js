@@ -314,6 +314,81 @@ describe("createApp", () => {
         });
     });
 
+    describe("country multiselect (integration)", () => {
+        it("enhances the cloned select on addGroup with index-patched ids", () => {
+            const app = createApp();
+            app.addGroup();
+            app.addGroup();
+
+            const inputs = document.querySelectorAll("#groups .country-multiselect-input");
+            expect(inputs).toHaveLength(2);
+            expect(inputs[0].id).toBe("countries-0-search");
+            expect(inputs[1].id).toBe("countries-1-search");
+            expect(document.querySelector('select[name="group[0][countries][]"]').hidden).toBe(true);
+        });
+
+        it("enhances server-rendered groups on init", async () => {
+            // Simulate a session-restore / import render: a group already
+            // exists in the DOM before createApp runs.
+            const tmpl = document.getElementById("group-template");
+            document.getElementById("groups").appendChild(tmpl.content.cloneNode(true));
+
+            const app = createApp();
+            app.init();
+            await flushMicrotasks();
+
+            expect(document.querySelector("#groups .country-multiselect")).not.toBeNull();
+            expect(document.querySelector("#groups select[multiple]").hidden).toBe(true);
+        });
+
+        it("widget selections reach getGroupState and the debounced preview", async () => {
+            vi.useFakeTimers();
+            const app = createApp();
+            app.init();
+            await flushMicrotasks();
+            app.addGroup();
+
+            const input = document.querySelector(".country-multiselect-input");
+            input.value = "swed";
+            input.dispatchEvent(new Event("input", { bubbles: true }));
+            document.querySelector('#groups .country-multiselect-option[data-code="se"]').click();
+
+            expect(app.getGroupState()[0].codes).toEqual(["se"]);
+
+            // The widget's change event rides the same 250ms debounce as
+            // direct form edits.
+            await vi.advanceTimersByTimeAsync(250);
+            const styleEl = document.getElementById("map-colouriser-style");
+            expect(styleEl.textContent).toMatch(/\.se \{ fill: #/);
+        });
+
+        it("blocks downloadSvg via the search input's customError until a country is picked", () => {
+            // The fixture template's select isn't required; flip it on so
+            // enhancement transfers requiredness to the search input.
+            document.getElementById("group-template").content.querySelector("select").required = true;
+
+            const app = createApp();
+            app.addGroup();
+
+            const form = document.getElementById("colouriser-form");
+            const reportSpy = vi.spyOn(form, "reportValidity").mockImplementation(() => {});
+            const createObjectSpy = vi
+                .spyOn(URL, "createObjectURL")
+                .mockReturnValue("blob:fake");
+
+            expect(form.checkValidity()).toBe(false);
+            app.downloadSvg();
+            expect(reportSpy).toHaveBeenCalledOnce();
+            expect(createObjectSpy).not.toHaveBeenCalled();
+
+            const input = document.querySelector(".country-multiselect-input");
+            input.value = "swe";
+            input.dispatchEvent(new Event("input", { bubbles: true }));
+            document.querySelector('#groups .country-multiselect-option[data-code="se"]').click();
+            expect(form.checkValidity()).toBe(true);
+        });
+    });
+
     describe("initMap", () => {
         it("renders a 'Preview unavailable' message on a 404", async () => {
             stubFetch({ ok: false, status: 404 });
