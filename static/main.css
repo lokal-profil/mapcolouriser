@@ -83,6 +83,18 @@ select[multiple] { min-height: 8rem; width: 100%; }
 .warnings { background: #fff6e0; border: 1px solid #d0a020; padding: 0.75rem 1rem; border-radius: 4px; }
 .warnings ul { margin: 0.25rem 0 0 1rem; padding: 0; }
 
+/* Shown at the top of every page when the TEST_DEPLOYMENT env var is set;
+   shares the .warnings palette. */
+.test-deployment-banner {
+    background: #fff6e0;
+    border: 1px solid #d0a020;
+    padding: 0.5rem 1rem;
+    border-radius: 4px;
+    text-align: center;
+    font-weight: 600;
+    margin-bottom: 1.5rem;
+}
+
 /* Buttons follow the Codex style guide (doc.wikimedia.org/codex): one primary
    progressive action per view; framed neutral for secondary actions; quiet for
    tertiary. Progressive marks actions that produce output (Generate, Download,

@@ -75,3 +75,21 @@ class TestSecretKey:
         assert isinstance(app1.config["SECRET_KEY"], str)
         assert len(app1.config["SECRET_KEY"]) >= 32
         assert app1.config["SECRET_KEY"] != app2.config["SECRET_KEY"]
+
+
+class TestTestDeployment:
+    def test_defaults_to_off_when_env_unset(self, monkeypatch):
+        monkeypatch.delenv("TEST_DEPLOYMENT", raising=False)
+        app = create_app(secret_key="test-secret")
+        assert app.config["TEST_DEPLOYMENT"] is False
+
+    def test_enabled_by_env(self, monkeypatch):
+        monkeypatch.setenv("TEST_DEPLOYMENT", "1")
+        app = create_app(secret_key="test-secret")
+        assert app.config["TEST_DEPLOYMENT"] is True
+
+    @pytest.mark.parametrize("value", ["0", "false", "False", "no", "off", "  "])
+    def test_falsy_values_leave_it_off(self, monkeypatch, value):
+        monkeypatch.setenv("TEST_DEPLOYMENT", value)
+        app = create_app(secret_key="test-secret")
+        assert app.config["TEST_DEPLOYMENT"] is False

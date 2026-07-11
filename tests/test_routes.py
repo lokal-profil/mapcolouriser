@@ -183,6 +183,31 @@ class TestIndex:
         assert 'value="world-compact" selected' in body
 
 
+class TestTestDeploymentBanner:
+    def test_absent_by_default(self, client):
+        body = client.get("/").get_data(as_text=True)
+        assert "test-deployment-banner" not in body
+
+    def test_shown_when_enabled(self, app, client):
+        app.config["TEST_DEPLOYMENT"] = True
+        body = client.get("/").get_data(as_text=True)
+        assert 'class="test-deployment-banner"' in body
+        assert "This is a test deployment" in body
+
+    def test_shown_on_result_page(self, app, client):
+        # base.html carries the banner, so the /generate result page gets it too.
+        app.config["TEST_DEPLOYMENT"] = True
+        resp = client.post(
+            "/generate",
+            data={
+                "group[0][title]": "Members",
+                "group[0][colour]": "#ff0000",
+                "group[0][countries][]": ["se"],
+            },
+        )
+        assert 'class="test-deployment-banner"' in resp.get_data(as_text=True)
+
+
 class TestGenerate:
     def test_valid_post_renders_inline_svg(self, client):
         resp = client.post(

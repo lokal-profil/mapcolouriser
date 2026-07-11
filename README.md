@@ -40,6 +40,31 @@ pnpm install   # one-time, dev-only — the Flask app itself has no Node dep
 pnpm test
 ```
 
+## Deployment
+
+Runs on [Wikimedia Toolforge](https://wikitech.wikimedia.org/wiki/Portal:Toolforge) via the [build service](https://wikitech.wikimedia.org/wiki/Help:Toolforge/Building_container_images), which picks up the `Procfile` (gunicorn). Commands below are run on a Toolforge login host.
+
+### Normal deployment
+
+```bash
+become mapcolouriser
+toolforge build start https://github.com/lokal-profil/mapcolouriser.git
+toolforge webservice buildservice restart --mount=none
+```
+
+(Use `start` instead of `restart` on the very first deploy.)
+
+### Test deployment
+
+Deploys a branch to a separate test tool. Setting the `TEST_DEPLOYMENT` environment variable (once — it persists across builds and restarts) makes every page show a "this is a test deployment" banner:
+
+```bash
+become <test-toolaccount>
+toolforge envvars create TEST_DEPLOYMENT 1
+toolforge build start --ref <branch> https://github.com/lokal-profil/mapcolouriser.git
+toolforge webservice buildservice restart --mount=none
+```
+
 ## Layout
 
 - `app/` — Flask app (factory, routes, pure helpers, Jinja templates)

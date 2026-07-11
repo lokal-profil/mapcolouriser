@@ -33,6 +33,17 @@ def create_app(secret_key: str | None = None) -> Flask:
     # 413 before the request reaches a handler.
     app.config["MAX_CONTENT_LENGTH"] = 2 * 1024 * 1024
 
+    # When set, base.html shows a "test deployment" banner on every page.
+    # Deliberately unprefixed so one env var can flag every tool deployed to
+    # the same test instance.
+    app.config["TEST_DEPLOYMENT"] = os.environ.get("TEST_DEPLOYMENT", "").strip().lower() not in (
+        "",
+        "0",
+        "false",
+        "no",
+        "off",
+    )
+
     # Primes the per-map cache and raises if a marker is missing.
     prime_caches()
 
