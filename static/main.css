@@ -294,39 +294,64 @@ button:disabled, .btn-progressive:disabled, .btn-destructive:disabled, .btn-prim
     height: 1px;
     margin: 0;
 }
-/* Switch geometry — shared by every toggle that uses the .switch span. */
+/* Switch geometry — shared by every toggle that uses the .switch span.
+   Colours follow Codex ToggleSwitch; the size is a deliberate deviation
+   (Codex's 48×32px track would crowd the header actions row). */
 .switch {
     display: inline-block;
     width: 2.2rem;
     height: 1.2rem;
-    background: #ccc;
-    border-radius: 0.6rem;
+    background: #fff;               /* background-color-base */
+    border: 1px solid #72777d;      /* border-color-interactive */
+    border-radius: 9999px;          /* border-radius-pill */
     position: relative;
-    transition: background 0.15s;
+    transition: background-color 0.15s, border-color 0.15s;
 }
 .switch::after {
     content: "";
     position: absolute;
     top: 0.1rem;
     left: 0.1rem;
+    box-sizing: border-box;
     width: 1rem;
     height: 1rem;
     background: #fff;
+    border: 1px solid #72777d;      /* border-color-interactive */
     border-radius: 50%;
-    transition: transform 0.15s;
+    transition: transform 0.15s, border-color 0.15s;
 }
+/* Off-state hover — the checked rules below out-specify these for the
+   on-state, which gets its own hover colour. */
+.live-preview-toggle:hover .switch,
+.circles-toggle:hover .switch {
+    background: #eaecf0;            /* background-color-interactive-subtle--hover */
+    border-color: #27292d;          /* border-color-interactive--hover */
+}
+.live-preview-toggle:hover .switch::after,
+.circles-toggle:hover .switch::after { border-color: #27292d; }
 /* On-state — Wikimedia Codex `background-color-progressive`. The live-
    preview toggle is driven by html.live-preview (set by the inline
    FOUC script in <head>) so the toggle's visual state matches the
    stored preference from first paint. main.js syncs input.checked
    to match. The circles toggle is a normal :checked-driven switch. */
-html.live-preview .live-preview-toggle .switch { background: #36c; }
-html.live-preview .live-preview-toggle .switch::after { transform: translateX(1rem); }
-.circles-toggle input[type="checkbox"]:checked ~ .switch { background: #36c; }
-.circles-toggle input[type="checkbox"]:checked ~ .switch::after { transform: translateX(1rem); }
+html.live-preview .live-preview-toggle .switch,
+.circles-toggle input[type="checkbox"]:checked ~ .switch {
+    background: #36c;               /* background-color-progressive */
+    border-color: transparent;
+}
+html.live-preview .live-preview-toggle .switch::after,
+.circles-toggle input[type="checkbox"]:checked ~ .switch::after {
+    transform: translateX(1rem);
+    border-color: transparent;
+}
+html.live-preview .live-preview-toggle:hover .switch,
+.circles-toggle:hover input[type="checkbox"]:checked ~ .switch {
+    background: #3056a9;            /* background-color-progressive--hover */
+    border-color: transparent;
+}
 .live-preview-toggle input[type="checkbox"]:focus-visible ~ .switch,
 .circles-toggle input[type="checkbox"]:focus-visible ~ .switch {
-    outline: 2px solid #66f;
+    outline: 2px solid #36c;        /* color-progressive */
     outline-offset: 2px;
 }
 
