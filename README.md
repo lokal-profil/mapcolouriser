@@ -74,12 +74,14 @@ pnpm test
 
 ## AI assistance disclosure
 
-This project was built in pair-programming with [Claude Code](https://www.anthropic.com/claude-code) (Anthropic, Opus 4.x) over interactive sessions.
+This project was built in pair-programming with [Claude Code](https://www.anthropic.com/claude-code) (Anthropic: Opus 4.x and Fable 5.x) over interactive sessions.
 
 - **Direction, decisions, and accountability — human.** Library and dependency choices, module layout, naming, what to accept or reject from review feedback, and final approval of every change and commit message.
-- **Code, tests, comments, and most documentation — AI.** Drafted by the assistant; reviewed and edited by the maintainer before being written and verified afterwards.
+- **Code, tests, comments, and some documentation — AI.** Drafted by the assistant; reviewed and edited by the maintainer before being written and verified afterwards.
 
 The maintainer takes full responsibility for the code in this repository. If you find a bug, security issue, or licence concern, please file an issue or a PR — this disclosure does not alter normal expectations of correctness or licence terms.
+
+Note that none of the base maps were created using AI (see [Credits](#credits)) nor is AI used in the authoring of any maps produced by the tool or in any other aspect of running the tool.
 
 ## Licence
 
