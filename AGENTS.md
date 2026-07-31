@@ -1,0 +1,60 @@
+# AGENTS.md
+
+Guidance for AI coding agents working in this repository. Claude Code doesn't read `AGENTS.md` — if that's your tool, run `ln -s AGENTS.md CLAUDE.md` once per clone (the symlink is untracked).
+
+## Pre-commit verification
+
+CI runs `ruff format --check` as a separate gate from `ruff check`. If you only run the latter locally, you'll pass-then-fail CI on formatting-only diffs. After any Python edit, run all of:
+
+- `uv run pytest -q`
+- `uv run ruff check`
+- `uv run ruff format --check`
+- `pnpm test` (if you touched JS, templates, or static assets the JS suite cares about)
+
+`uv run python scripts/check_svg.py` validates the registered base SVGs — only needed if you've added or modified a map.
+
+## Running a single test
+
+- Python: `uv run pytest tests/test_routes.py::TestGenerate::test_valid_post_renders_inline_svg -q`
+- JS: `pnpm test -- -t "substring of test name"` (Vitest `-t` filter)
+
+## Architecture
+
+### Server
+
+Flask app factory in `app/__init__.py`. Routes in `app/routes.py` are thin (parse / validate / persist to session); all rendering logic lives in pure leaf modules so it stays testable without a Flask context:
+
+- `app/colouriser.py` — `Group` dataclass (form validation), `build_css(groups, include_small_country_circles=False)`, `build_legend(groups)`. No Flask imports.
+- `app/maps.py` — frozen `MapInfo(filename, label, description="")` dataclass (`kw_only=True`); `MAPS` registry; `render_map(key, css)` which assembles a prepared base SVG with the user CSS injected just before `</svg>` (`<style id="map-colouriser-style" data-map="{key}">` — the `data-map` attribute is inert metadata recording which map produced the output, read back by the import path). `_prepared(key)` is `@cache`-decorated; `prime_caches()` runs at startup so request handlers do no I/O.
+- `app/svg_injector.py` — `validate_svg` (XML well-formedness + literal `</svg>` close-tag) and `add_viewbox_if_missing`. `validate_svg` parses via `defusedxml` because it also vets **untrusted uploads** on the import path, not just the trusted `static/` base maps; it catches both `ParseError` and `DefusedXmlException` (the latter does not subclass the former).
+- `app/svg_import.py` — pure leaf (no Flask), mirrors `colouriser.py`. `import_svg(svg_text, valid_codes=None)` reads back the `<style ... data-map="...">` element `render_map` injects and reconstructs `ImportResult(map_key, groups, land_colour, ocean_colour, include_circles, warnings)`. Country-code validation is injected via `valid_codes` (route layer owns the pycountry coupling); unknown codes are discarded per-code and codes repeated within a group are merged to one, each with a warning (a group is skipped only when no recognized codes remain). Missing/unknown `data-map` falls back to `DEFAULT_MAP`; land/ocean blocks classify by class *overlap* with the effective map's declared classes, so they are still recovered on the fallback path, and circles (CSS-intrinsic) is recovered regardless.
+
+  Import-warning conventions: end-user language (say "group" and "country code", never parser jargon like "style block"); name the affected group; truncate any file content echoed back (warnings travel via the ~4 KB session cookie); warnings must only render through `{{ warning }}` (autoescaped) — never `|safe`. The parser is deliberately tolerant of what browsers/optimizers accept (trailing `;` optional, `#rgb` expanded, duplicate code merged rather than fatal, broken group colour → keep the group with an empty colour so the form assigns a palette default) — don't tighten it back; there's an SVGO-shaped round-trip test guarding this.
+
+### Client
+
+- `static/main.js` — ES module. Pure helpers `buildCss(state, {includeCircles})` and `buildLegend(state)` are named exports. `createApp(doc = document)` is a factory: looks up DOM elements, returns an object with `{init, addGroup, removeGroup, downloadSvg, initMap, setLivePreviewEnabled, getGroupState}` so tests can drive behaviour without dispatching synthetic events. The page entry is an inline `<script type="module">` in `index.html` calling `createApp()?.init()`.
+- `static/country_multiselect.js` — Codex MultiselectLookup-style enhancement for each group's country `<select multiple>`. Single export `createCountryMultiselect(selectEl, doc = document)`, which owns the idempotency guard (`data-enhanced`) and returns `null` for an already-enhanced select. The select stays in the DOM (hidden) as the source of truth: the widget writes `option.selected` and dispatches a bubbling `change`, so form POST, `getGroupState()`, live preview, import, and the no-JS baseline are untouched. Because a hidden `required` select would abort submits invisibly, enhancement drops `required` from the select and mirrors it as a `setCustomValidity` customError on the visible search input. `main.js` wraps it in a private `enhanceCountrySelects()` inside `createApp`, called from `init()` and after `addGroup()`. Deliberate deviations from Codex: selected countries leave the menu (chips are the removal affordance), chips are plain buttons, no query highlighting. Selection behaves like `keepInputOnSelection`: the menu stays open and the query survives each pick — preselected, so typing overwrites it.
+- `static/main.css` — single external stylesheet (extracted from a former inline `<style>` block); rules grouped by section with blank lines.
+- **Button and form-control styling follows the Codex style guide** (doc.wikimedia.org/codex) — text inputs, the base-map select, textarea, error/warning boxes (Message), and toggle switches all use Codex component colours; the toggles' compact size is a deliberate deviation. Semantic rule: progressive (blue) = produces/advances output (Generate, Download, Import); destructive (red) = discards user input (Reset, Remove group, base-colour resets); neutral = additive/utility (+ Add group, Copy). Weights: `.btn-primary.btn-progressive` (filled) for THE main action — only one visible per view (Generate is `.js-fallback`, Download is `.js-live`, so they swap); plain classes for framed normal; `.btn-quiet` for tertiary/repeated actions. Ordering: most important last, destructive first. `.btn` gives a link button styling (the Codex exception used by result.html's Download — a link on purpose; don't "fix" it into a nested `<a><button>`). Colour values are Codex design tokens (commented in main.css) — don't invent new ones.
+- `app/templates/base.html` — shell with FOUC-prevention inline script in `<head>`, h1 + `header_actions` block, the `config.TEST_DEPLOYMENT` banner (set from the env var of the same name in the app factory; README documents the Toolforge side), page footer, and `<link rel="stylesheet" href="...main.css">`.
+- `index.html` and `result.html` extend `base.html`.
+
+### Cross-cutting patterns
+
+- **Progressive enhancement** — JS-off path posts to `/generate`; JS-on path prevents form submission (`livePreviewEnabled` short-circuits the submit handler) and renders client-side. CSS hides the submit button in live-preview mode (`.js-fallback`) and hides the toggle / live-only controls in JS-off mode (`.js-only`).
+- **Persistence layers** — live-preview toggle in `localStorage` (`mapcolouriser:live-preview`); last-used map key, last group state, and circles preference in the Flask session. `POST /reset` clears the session keys; localStorage is intentionally untouched. `POST /import` writes the same map/groups/base/circles session keys as `/generate`, plus a transient `import_warnings` key that `GET /` pops on the next render (non-blocking warnings shown above the form).
+- **Race guard in `initMap`** — `mapRequestSeq` is a monotonic counter; rapid map-selector switches issue overlapping fetches and the `.then`/`.catch` handlers bail when `myReq !== mapRequestSeq`, so an older fetch resolving second can't overwrite the newer preview. Don't remove these guards without reading commit `f21ac18`'s history.
+- **`data-map` is stamped in TWO places that must stay in sync** — `render_map` (server-rendered/`/download` files) and `initMap` in `main.js` (the client `<style>` that `downloadSvg` serializes via `XMLSerializer`). The default JS-on download path ships the *client* copy, so dropping the `main.js` stamp silently breaks re-import for most users while every server-side test stays green. If the marker format changes, change both and check `_STYLE_OPEN_RE` in `app/svg_import.py`.
+
+### Gotcha: `MAPS` is imported by reference
+
+`app/routes.py` and `scripts/check_svg.py` both do `from app.maps import MAPS`, capturing a reference to the dict object. `monkeypatch.setattr(maps_module, "MAPS", ...)` does NOT propagate to those importers — they still see the original. Use one of:
+
+- `monkeypatch.setitem(maps_module.MAPS, key, MapInfo(...))` / `monkeypatch.delitem(...)` — mutate the shared dict in place (auto-restored by monkeypatch).
+- `monkeypatch.setattr(maps_module, "MAPS", {...})` AND `monkeypatch.setattr(other_module, "MAPS", {...})` for each importer (the pattern used in `tests/test_check_svg.py`).
+
+### Test fixture conventions
+
+- **JS** — committed code never assigns `innerHTML`, so the suites build their DOM with `DOMParser + document.documentElement.replaceWith(...)` instead. Follow the same pattern when adding JS tests. (Under Claude Code a project hook enforces this; on other tooling treat it as convention.)
+- **Import edge cases** — `tests/test_svg_import.py` has a `_lenient_group` helper that builds a `Group` with validation bypassed, so fixtures carrying values `Group` rejects (non-alpha-2 codes, repeated codes, non-`#rrggbb` colours) still render through `build_css` and stay coupled to its block format. Use it whenever the invalid thing is a *value*. Keep literal CSS strings when the invalid thing is the block *shape* — optional semicolons, minified/SVGO input, a block with no `fill` rule — since generating those from our own formatter would test it against itself. Land/ocean colour shorthand also has to stay literal: `build_css` re-validates those two colours and would reject `#ddd` before it reached the output.

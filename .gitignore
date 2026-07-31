@@ -11,3 +11,6 @@ node_modules/
 .claude/
 .playwright-mcp/
 tmp/
+
+# Per-clone symlink to AGENTS.md, for Claude Code (which doesn't read AGENTS.md)
+/CLAUDE.md
