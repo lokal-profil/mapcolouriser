@@ -25,6 +25,21 @@ def _render(map_key, groups, *, circles=False, land=None, ocean=None):
     return render_map(map_key, css)
 
 
+def _lenient_group(title, colour, codes):
+    """A ``Group`` with validation bypassed — bad codes, repeats, bad colours.
+
+    Lets invalid-*value* fixtures still go through ``build_css``, so their block
+    shape stays coupled to the production formatter instead of being re-typed as
+    a literal CSS string that could drift from it. ``build_css`` interpolates
+    ``group.colour`` verbatim (only land/ocean colours are re-validated), so
+    anything set here reaches the output as-is.
+    """
+    group = object.__new__(Group)
+    for name, value in (("title", title), ("colour", colour), ("country_codes", tuple(codes))):
+        object.__setattr__(group, name, value)
+    return group
+
+
 class TestRoundTrip:
     @pytest.mark.parametrize("map_key", list(MAPS))
     def test_recovers_every_field(self, map_key):
@@ -105,9 +120,7 @@ class TestCodeValidation:
         assert "Skipped group 'Bogus': no recognized country codes." in result.warnings
 
     def test_mixed_codes_keep_valid_and_discard_unknown(self):
-        # 'alsaf' can't be built via Group (it enforces alpha-2), so inject the
-        # hand-edited selector directly.
-        svg = render_map("world", "\n/* Mix */\n.alsaf, .se { fill: #332288; }\n")
+        svg = _render("world", [_lenient_group("Mix", "#332288", ("alsaf", "se"))])
         result = import_svg(svg, valid_codes=_CODES)
 
         assert [g["countries"] for g in result.groups] == [["se"]]
@@ -115,15 +128,14 @@ class TestCodeValidation:
         assert "Group 'Mix': discarded unrecognized country code(s): alsaf." in result.warnings
 
     def test_repeated_code_is_merged_and_warned(self):
-        # Group() rejects duplicates, so inject the hand-edited selector.
-        svg = render_map("world", "\n/* Nordics */\n.se, .no, .se { fill: #332288; }\n")
+        svg = _render("world", [_lenient_group("Nordics", "#332288", ("se", "no", "se"))])
         result = import_svg(svg, valid_codes=_CODES)
 
         assert [g["countries"] for g in result.groups] == [["se", "no"]]
         assert result.warnings == ["Group 'Nordics': ignored repeated country code(s): se."]
 
     def test_repeated_unknown_code_warns_only_as_unrecognized(self):
-        svg = render_map("world", "\n/* Mix */\n.zz, .se, .zz { fill: #332288; }\n")
+        svg = _render("world", [_lenient_group("Mix", "#332288", ("zz", "se", "zz"))])
         result = import_svg(svg, valid_codes=_CODES)
 
         assert [g["countries"] for g in result.groups] == [["se"]]
@@ -137,6 +149,10 @@ class TestCodeValidation:
 
 
 class TestOptionalSemicolons:
+    # These fixtures are deliberately literal CSS, not build_css output: the
+    # point is to accept block *shapes* build_css never emits but browsers and
+    # optimizers do. Generating them from our own formatter would test it
+    # against itself.
     def test_block_without_trailing_semicolon(self):
         svg = render_map("world", "\n/* A */\n.se { fill: #332288 }\n")
         result = import_svg(svg, valid_codes=_CODES)
@@ -175,13 +191,15 @@ class TestOptionalSemicolons:
 
 class TestColourValidation:
     def test_short_hex_is_expanded(self):
-        svg = render_map("world", "\n/* A */\n.se { fill: #000; }\n")
+        svg = _render("world", [_lenient_group("A", "#000", ("se",))])
         result = import_svg(svg, valid_codes=_CODES)
 
         assert result.groups[0]["colour"] == "#000000"
         assert result.warnings == []
 
     def test_short_hex_land_and_ocean_are_expanded(self):
+        # Literal CSS because build_css re-validates land/ocean colours and
+        # would reject the shorthand before it reached the output.
         css = (
             "\n/* Land and small circles */\n.landxx, .circlexx { fill: #ddd; }\n"
             "\n/* Oceans, seas, and large lakes */\n.oceanxx { fill: #fff; }\n"
@@ -194,7 +212,7 @@ class TestColourValidation:
         assert result.warnings == []
 
     def test_invalid_colour_keeps_group_with_default(self):
-        svg = render_map("world", "\n/* Broken */\n.se { fill: #88csscee; }\n")
+        svg = _render("world", [_lenient_group("Broken", "#88csscee", ("se",))])
         result = import_svg(svg, valid_codes=_CODES)
 
         # The group survives with an empty colour (the form assigns a palette
@@ -233,15 +251,14 @@ class TestColourValidation:
     def test_mixed_validity_example_recovers_all_three_groups(self):
         # The reported edge case: #000 shorthand, an invalid colour, and a
         # valid colour — all three groups must survive.
-        css = (
-            "\n/* Land and small circles */\n.landxx, .circlexx { fill: #dddddd; }\n"
-            "\n/* Oceans, seas, and large lakes */\n.oceanxx { fill: #ffffff; }\n"
-            "\n/* Map 1 */\n.af, .ao { fill: #000; }\n"
-            "\n/* Map 2 */\n.al, .dz { fill: #88csscee; }\n"
-            "\n/* map 3 */\n.br { fill: #44aa99; }\n"
-        )
+        groups = [
+            _lenient_group("Map 1", "#000", ("af", "ao")),
+            _lenient_group("Map 2", "#88csscee", ("al", "dz")),
+            Group("map 3", "#44aa99", ("br",)),
+        ]
+        svg = _render("world", groups, land="#dddddd", ocean="#ffffff")
         codes = frozenset({"af", "ao", "al", "dz", "br"})
-        result = import_svg(render_map("world", css), valid_codes=codes)
+        result = import_svg(svg, valid_codes=codes)
 
         assert [g["colour"] for g in result.groups] == ["#000000", "", "#44aa99"]
         assert [g["countries"] for g in result.groups] == [["af", "ao"], ["al", "dz"], ["br"]]
