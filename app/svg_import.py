@@ -77,7 +77,8 @@ def import_svg(svg_text: str, valid_codes: frozenset[str] | None = None) -> Impo
     recovered when their block's classes overlap the fallback map's declared
     classes, and the circles flag (CSS-intrinsic) is recovered regardless.
     Unrecognized country codes are discarded per-code; a group is only skipped
-    outright when no recognized codes remain. Colours accept ``#rrggbb`` or
+    outright when no recognized codes remain. Codes repeated within a group are
+    merged to a single entry. Colours accept ``#rrggbb`` or
     ``#rgb`` shorthand (expanded); a group with any other colour value is kept
     with an empty colour so the form assigns a palette default. Everything
     discarded or skipped adds a warning rather than aborting the whole import.
@@ -157,14 +158,32 @@ def import_svg(svg_text: str, valid_codes: frozenset[str] | None = None) -> Impo
                 ocean_colour = colour
             continue
 
-        codes = [c for c in classes if code_ok(c)]
-        unknown = [c for c in classes if not code_ok(c)]
+        # Partition the classes, keeping first-occurrence order. Repeats are
+        # merged rather than fatal, but reported so a typo is visible. Both
+        # echoed lists are deduplicated: a repeated unrecognized code is only
+        # worth one warning.
+        codes: list[str] = []
+        unknown: list[str] = []
+        repeated: list[str] = []
+        for c in classes:
+            if not code_ok(c):
+                if c not in unknown:
+                    unknown.append(c)
+            elif c in codes:
+                if c not in repeated:
+                    repeated.append(c)
+            else:
+                codes.append(c)
         if unknown:
             if not codes:
                 warnings.append(f"Skipped group {label!r}: no recognized country codes.")
                 continue
             warnings.append(
                 f"Group {label!r}: discarded unrecognized country code(s): {', '.join(unknown)}."
+            )
+        if repeated:
+            warnings.append(
+                f"Group {label!r}: ignored repeated country code(s): {', '.join(repeated)}."
             )
         if colour is None:
             # The group's real value is its title and countries — keep it and

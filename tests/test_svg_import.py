@@ -114,6 +114,21 @@ class TestCodeValidation:
         assert result.groups[0]["title"] == "Mix"
         assert "Group 'Mix': discarded unrecognized country code(s): alsaf." in result.warnings
 
+    def test_repeated_code_is_merged_and_warned(self):
+        # Group() rejects duplicates, so inject the hand-edited selector.
+        svg = render_map("world", "\n/* Nordics */\n.se, .no, .se { fill: #332288; }\n")
+        result = import_svg(svg, valid_codes=_CODES)
+
+        assert [g["countries"] for g in result.groups] == [["se", "no"]]
+        assert result.warnings == ["Group 'Nordics': ignored repeated country code(s): se."]
+
+    def test_repeated_unknown_code_warns_only_as_unrecognized(self):
+        svg = render_map("world", "\n/* Mix */\n.zz, .se, .zz { fill: #332288; }\n")
+        result = import_svg(svg, valid_codes=_CODES)
+
+        assert [g["countries"] for g in result.groups] == [["se"]]
+        assert result.warnings == ["Group 'Mix': discarded unrecognized country code(s): zz."]
+
     def test_unknown_code_accepted_under_shape_only_mode(self):
         svg = _render("world", [Group("Bogus", "#332288", ("zz",))])
         result = import_svg(svg)  # valid_codes=None → shape check only
