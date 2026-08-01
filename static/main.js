@@ -120,6 +120,31 @@ export function createApp(doc = document) {
     let landClasses = parseClassList(d => d.landClasses);
     let oceanClasses = parseClassList(d => d.oceanClasses);
 
+    function wireBaseColourReset(input, btn, defaultColour) {
+        // Both rows are optional — the template renders each only when the
+        // active map declares classes for that side.
+        if (!input || !btn) return;
+        // The server renders the button enabled unconditionally: it can't keep
+        // an "is this overridden?" state truthful as the picker changes, and a
+        // disabled button would leave a JS-off user unable to reset a colour
+        // they just picked. So JS owns that state, and has to establish it here
+        // rather than inherit it from the markup.
+        syncResetState(input, btn, defaultColour);
+        input.addEventListener("change", () => {
+            syncResetState(input, btn, defaultColour);
+            requestUpdate();
+        });
+        // The button is type=submit for the no-JS path (it posts to
+        // /reset-<side>-colour), so the click must be cancelled here or every
+        // JS-on reset becomes a page load.
+        btn.addEventListener("click", e => {
+            e.preventDefault();
+            input.value = defaultColour;
+            syncResetState(input, btn, defaultColour);
+            requestUpdate();
+        });
+    }
+
     function syncResetState(input, btn, defaultValue) {
         if (!input || !btn || !defaultValue) return;
         btn.disabled = input.value.toLowerCase() === defaultValue.toLowerCase();
@@ -195,17 +220,16 @@ export function createApp(doc = document) {
         const fragment = tmpl.content.cloneNode(true);
         patchPlaceholders(fragment, idx);
         applyDefaultColour(fragment, idx);
-        // Captured before appendChild empties the fragment; the reference stays
-        // valid once the node is attached.
-        const groupEl = fragment.querySelector(".group");
+        // Looked up before appendChild empties the fragment; the reference
+        // stays valid once the node is attached. By name rather than
+        // input[type=text] so a later widget or markup reorder inside the group
+        // can't shadow the title field.
+        const titleInput = fragment.querySelector(`input[name="group[${idx}][title]"]`);
         groupsContainer.appendChild(fragment);
         enhanceCountrySelects();
         updateActionState();
         // Focus last, so nothing above steals it back. The no-JS path gets the
-        // same landing spot via autofocus (see _SESSION_FOCUS_GROUP). Selected
-        // by name, not input[type=text] — the enhanced country widget adds a
-        // text input of its own inside the group.
-        const titleInput = groupEl && groupEl.querySelector(`input[name="group[${idx}][title]"]`);
+        // same landing spot via autofocus (see _SESSION_FOCUS_GROUP).
         if (titleInput) titleInput.focus();
         requestUpdate();
     }
@@ -448,37 +472,8 @@ export function createApp(doc = document) {
                 else { mapRequestSeq++; userStyleEl = null; }
             });
         }
-        if (landColourInput && landResetBtn) {
-            // The server renders these enabled unconditionally — it can't keep an
-            // "overridden?" state truthful as the picker changes, so JS owns it
-            // and has to establish it here rather than inherit it from the markup.
-            syncResetState(landColourInput, landResetBtn, defaultLandColour);
-            landColourInput.addEventListener("change", () => {
-                syncResetState(landColourInput, landResetBtn, defaultLandColour);
-                requestUpdate();
-            });
-            // type=submit for the no-JS path (posts to /reset-land-colour), so
-            // the click has to be cancelled here or JS users get a page load.
-            landResetBtn.addEventListener("click", e => {
-                e.preventDefault();
-                landColourInput.value = defaultLandColour;
-                syncResetState(landColourInput, landResetBtn, defaultLandColour);
-                requestUpdate();
-            });
-        }
-        if (oceanColourInput && oceanResetBtn) {
-            syncResetState(oceanColourInput, oceanResetBtn, defaultOceanColour);
-            oceanColourInput.addEventListener("change", () => {
-                syncResetState(oceanColourInput, oceanResetBtn, defaultOceanColour);
-                requestUpdate();
-            });
-            oceanResetBtn.addEventListener("click", e => {
-                e.preventDefault();
-                oceanColourInput.value = defaultOceanColour;
-                syncResetState(oceanColourInput, oceanResetBtn, defaultOceanColour);
-                requestUpdate();
-            });
-        }
+        wireBaseColourReset(landColourInput, landResetBtn, defaultLandColour);
+        wireBaseColourReset(oceanColourInput, oceanResetBtn, defaultOceanColour);
         if (copyBtn && legendOutput) {
             copyBtn.addEventListener("click", async () => {
                 const original = copyBtn.textContent;

@@ -566,13 +566,15 @@ class TestBaseColours:
         return data
 
     @pytest.mark.parametrize(
-        ("path", "cleared", "kept"),
+        ("path", "cleared", "kept", "kept_value"),
         [
-            ("/reset-land-colour", "land_colour", "ocean_colour"),
-            ("/reset-ocean-colour", "ocean_colour", "land_colour"),
+            ("/reset-land-colour", "land_colour", "ocean_colour", "#abcdef"),
+            ("/reset-ocean-colour", "ocean_colour", "land_colour", "#112233"),
         ],
     )
-    def test_reset_clears_one_colour_and_keeps_the_other(self, client, path, cleared, kept):
+    def test_reset_clears_one_colour_and_keeps_the_other(
+        self, client, path, cleared, kept, kept_value
+    ):
         with client.session_transaction() as s:
             s["land_colour"] = "#112233"
             s["ocean_colour"] = "#abcdef"
@@ -584,23 +586,23 @@ class TestBaseColours:
             # Removed, not set to the default — absence is how "not overridden"
             # is spelled, and GET / fills in the default.
             assert cleared not in s
-            assert s[kept] == {"land_colour": "#112233", "ocean_colour": "#abcdef"}[kept]
+            assert s[kept] == kept_value
 
     @pytest.mark.parametrize(
-        ("path", "picker", "default_attr"),
+        ("path", "picker", "default_colour"),
         [
-            ("/reset-land-colour", "land-colour", "DEFAULT_LAND"),
-            ("/reset-ocean-colour", "ocean-colour", "DEFAULT_OCEAN"),
+            ("/reset-land-colour", "land-colour", DEFAULT_LAND),
+            ("/reset-ocean-colour", "ocean-colour", DEFAULT_OCEAN),
         ],
     )
     def test_index_after_reset_shows_the_default_in_the_picker(
-        self, client, path, picker, default_attr
+        self, client, path, picker, default_colour
     ):
         client.post(path, data=self._submitted_form())
 
         body = client.get("/").get_data(as_text=True)
         picker_tag = re.search(rf'<input[^>]*id="{picker}"[^>]*>', body)
-        assert picker_tag and f'value="{getattr(self, default_attr)}"' in picker_tag.group(0)
+        assert picker_tag and f'value="{default_colour}"' in picker_tag.group(0)
 
     def test_reset_preserves_groups_and_other_settings(self, client):
         client.post("/reset-land-colour", data=self._submitted_form(circles="1"))
@@ -631,6 +633,26 @@ class TestBaseColours:
         body = client.get("/").get_data(as_text=True)
         panel = re.search(r"<details[^>]*advanced-settings[^>]*>", body)
         assert panel and "open" not in panel.group(0)
+
+    def test_the_forms_default_button_generates(self, client):
+        # Implicit submission (Enter in a text field) activates the FIRST submit
+        # button in tree order owned by the form, and the header renders before
+        # the form. Without a form-owned submit ahead of them, a header Reset
+        # claims that role: Enter while typing a group title would silently
+        # revert a base colour with JS on, and post /reset-land-colour with JS
+        # off. Assert on order, since no test client can press Enter.
+        body = client.get("/").get_data(as_text=True)
+        owned = re.findall(
+            r'<button\b(?=[^>]*\btype="submit")(?=[^>]*\bform="colouriser-form")[^>]*>',
+            body,
+            re.DOTALL,
+        )
+        assert owned, "no form-owned submit buttons rendered"
+        first = owned[0]
+        assert "formaction" not in first, (
+            f"the default button must post to the form's own action, got: {first!r}"
+        )
+        assert "visually-hidden" in first
 
     @pytest.mark.parametrize("button", ["reset-land", "reset-ocean"])
     def test_reset_buttons_are_submits_wired_to_the_form(self, client, button):
@@ -811,14 +833,19 @@ class TestGroupActions:
         client.post("/add-group", data=self._form(2))
 
         body = client.get("/").get_data(as_text=True)
-        assert 'value="G0"' in body
-        assert 'value="G1"' in body
+        assert _group_title(body, 0) == "G0"
+        assert _group_title(body, 1) == "G1"
+        # Countries too, not just titles: losing them would make a no-JS user
+        # re-pick every country on each Add click.
+        assert _selected_options(body, "group[0][countries][]") == {"se"}
+        assert _selected_options(body, "group[1][countries][]") == {"se"}
         assert body.count('name="group[2][title]"') == 1
 
     def test_add_uses_max_index_plus_one_so_palette_defaults_never_collide(self, client):
         # Sparse indices (0, 2) are what a JS-side removal leaves behind. The new
-        # group must be 3, not 2: index 2's palette colour is still on the form,
-        # carried as a concrete value by the surviving group.
+        # group must be 3, not 2: reusing an index that is still on the form
+        # collapses the two groups into one when _parse_groups keys by index, so
+        # the appended group would vanish.
         data = {
             "group[0][title]": "G0",
             "group[0][colour]": "#ff0000",
@@ -836,10 +863,13 @@ class TestGroupActions:
         client.post("/add-group", data=self._form(2))
 
         body = client.get("/").get_data(as_text=True)
-        new_group = body.split('id="group-2"', 1)[1]
-        assert "autofocus" in new_group.split("</div>", 1)[0]
-        # Exactly one field on the page claims focus.
-        assert body.count("autofocus") == 1
+        # Assert on the tag itself — a positional split through the group's
+        # markup would break on any reordering of the fields.
+        tag = re.search(r'<input[^>]*name="group\[2\]\[title\]"[^>]*>', body).group(0)
+        assert "autofocus" in tag
+        # Exactly one field on the page claims focus. Match the attribute, not
+        # the bare word, which also appears in the template's comment.
+        assert len(re.findall(r"\sautofocus", body)) == 1
 
     def test_autofocus_is_consumed_by_the_first_render(self, client):
         # Transient like import_warnings — a refresh must not re-steal focus.
@@ -861,8 +891,42 @@ class TestGroupActions:
 
         assert "autofocus" not in client.get("/").get_data(as_text=True)
 
+    def test_add_and_remove_buttons_are_submits_wired_to_their_routes(self, client):
+        # The routes are exercised by POSTing them directly, so without this the
+        # markup that makes the no-JS path exist is untested: reverting either
+        # button to type="button", or dropping formaction/formnovalidate, kills
+        # no-JS add/remove while the whole suite stays green. (Without
+        # formnovalidate the empty required title blocks the submit outright.)
+        body = client.get("/").get_data(as_text=True)
+
+        add = re.search(r'<button[^>]*id="add-group"[^>]*>', body, re.DOTALL).group(0)
+        assert 'type="submit"' in add
+        assert 'formaction="/add-group"' in add
+        assert "formnovalidate" in add
+
+        removes = re.findall(r'<button[^>]*name="remove"[^>]*>', body, re.DOTALL)
+        # Two rendered groups plus the <template> clone.
+        assert [re.search(r'value="([^"]*)"', t).group(1) for t in removes] == [
+            "0",
+            "1",
+            "__INDEX__",
+        ]
+        for tag in removes:
+            assert 'type="submit"' in tag
+            assert 'formaction="/remove-group"' in tag
+            assert "formnovalidate" in tag
+
+    def test_template_clone_carries_the_remove_payload(self, client):
+        # The third leg of the sync. If the clone loses name/value, a group
+        # added client-side posts no index on any degraded-JS path and
+        # /remove-group silently no-ops.
+        body = client.get("/").get_data(as_text=True)
+        tmpl = body.split('<template id="group-template">', 1)[1].split("</template>", 1)[0]
+        assert 'name="remove"' in tmpl
+        assert 'value="__INDEX__"' in tmpl
+
     def test_group_anchors_are_rendered(self, client):
-        # The ids the add/remove redirects target.
+        # The ids /remove-group anchors to; /add-group sends no fragment.
         body = client.get("/").get_data(as_text=True)
         assert 'id="group-0"' in body
         assert 'id="group-1"' in body
@@ -915,6 +979,7 @@ class TestGroupActions:
         with client.session_transaction() as s:
             assert [g["index"] for g in s["last_groups"]] == [0, 2]
             assert [g["title"] for g in s["last_groups"]] == ["G0", "G2"]
+            assert [g["countries"] for g in s["last_groups"]] == [["se"], ["se"]]
 
     def test_removing_the_only_group_leaves_one_blank_group(self, client):
         # Not a no-op (a dead button reads as broken) and not zero: GET / renders
@@ -998,6 +1063,153 @@ class TestGroupActions:
 
         with client.session_transaction() as s:
             assert s[key] == before
+
+    @pytest.mark.parametrize(
+        ("path", "extra"),
+        [
+            ("/add-group", {}),
+            ("/remove-group", {"remove": "0"}),
+            ("/reset-land-colour", {}),
+        ],
+    )
+    def test_no_route_can_persist_more_than_the_cap(self, client, path, extra):
+        # The cap on /add-group only stops the button growing the list. Without a
+        # clamp in the shared writer, one hand-made POST persists any number of
+        # groups and every later GET / re-renders a ~250-option select per group
+        # (measured: 200 groups -> 11.9 MB of HTML from a 944-byte cookie).
+        client.post(path, data=self._form(routes._MAX_GROUPS + 70, **extra))
+
+        with client.session_transaction() as s:
+            assert len(s["last_groups"]) == routes._MAX_GROUPS
+        assert len(client.get("/").get_data()) < 2_000_000
+
+    def test_long_titles_are_clamped(self, client):
+        client.post("/add-group", data=self._form(1, **{"group[0][title]": "x" * 5000}))
+
+        with client.session_transaction() as s:
+            assert len(s["last_groups"][0]["title"]) == routes._MAX_TITLE_LEN
+
+    def test_title_input_carries_maxlength(self, client):
+        body = client.get("/").get_data(as_text=True)
+        tag = re.search(r'<input[^>]*name="group\[0\]\[title\]"[^>]*>', body).group(0)
+        assert f'maxlength="{routes._MAX_TITLE_LEN}"' in tag
+
+    @pytest.mark.parametrize(
+        "path", ["/add-group", "/remove-group", "/reset-land-colour", "/reset-ocean-colour"]
+    )
+    def test_a_request_with_no_group_fields_leaves_stored_groups_alone(self, client, path):
+        # "No group data in this request" is not "delete their groups".
+        saved = [{"index": 0, "title": "Members", "colour": "#ff0000", "countries": ["se"]}]
+        with client.session_transaction() as s:
+            s["last_groups"] = saved
+
+        client.post(path, data={"land_colour": "#dddddd"})
+
+        with client.session_transaction() as s:
+            assert s["last_groups"] == saved
+
+    def test_one_malformed_colour_does_not_discard_the_other(self, client):
+        with client.session_transaction() as s:
+            s["land_colour"] = "#111111"
+            s["ocean_colour"] = "#222222"
+
+        client.post("/add-group", data=self._form(1, land_colour="bogus", ocean_colour="#abcdef"))
+
+        with client.session_transaction() as s:
+            assert s["land_colour"] == "#111111"  # rejected, previous value kept
+            assert s["ocean_colour"] == "#abcdef"  # valid, and not collateral damage
+
+    def test_absent_colour_field_does_not_reset_the_stored_value(self, client):
+        # A map that declares no ocean_classes renders no ocean row, so the form
+        # posts no ocean_colour — silence, not a request to reset it.
+        with client.session_transaction() as s:
+            s["ocean_colour"] = "#abcdef"
+
+        client.post("/add-group", data=self._form(1, land_colour="#112233"))
+
+        with client.session_transaction() as s:
+            assert s["ocean_colour"] == "#abcdef"
+
+    def test_cap_tells_the_user_why_nothing_happened(self, client):
+        # A full reload with nothing added and no message reads as a broken
+        # button — the same reason removing the last group returns a blank one.
+        client.post("/add-group", data=self._form(routes._MAX_GROUPS))
+
+        body = client.get("/").get_data(as_text=True)
+        assert 'class="warnings"' in body
+        assert f"at most {routes._MAX_GROUPS} groups" in body
+
+    def test_cap_message_is_cleared_after_one_render(self, client):
+        client.post("/add-group", data=self._form(routes._MAX_GROUPS))
+        client.get("/")
+
+        assert 'class="warnings"' not in client.get("/").get_data(as_text=True)
+
+    def test_a_successful_add_says_nothing(self, client):
+        client.post("/add-group", data=self._form(2))
+
+        assert 'class="warnings"' not in client.get("/").get_data(as_text=True)
+
+    def test_oversized_state_keeps_the_last_good_groups_and_says_so(self, client):
+        # Clamping alone doesn't guarantee a fit: 30 groups each carrying many
+        # countries serialises past the cookie limit, the browser drops the
+        # whole cookie, and every typed value vanishes with nothing on screen.
+        saved = [{"index": 0, "title": "Members", "colour": "#ff0000", "countries": ["se"]}]
+        with client.session_transaction() as s:
+            s["last_groups"] = saved
+
+        every_country = sorted(routes._VALID_CODES)
+        data = {}
+        for i in range(routes._MAX_GROUPS):
+            data[f"group[{i}][title]"] = f"G{i}"
+            data[f"group[{i}][colour]"] = "#ff0000"
+            data[f"group[{i}][countries][]"] = every_country
+        client.post("/add-group", data=data)
+
+        with client.session_transaction() as s:
+            assert s["last_groups"] == saved
+        body = client.get("/").get_data(as_text=True)
+        assert "too much to remember between page loads" in body
+
+    def test_state_that_fits_is_stored_without_a_warning(self, client):
+        client.post("/add-group", data=self._form(5))
+
+        with client.session_transaction() as s:
+            assert len(s["last_groups"]) == 6
+        assert 'class="warnings"' not in client.get("/").get_data(as_text=True)
+
+    def test_generate_refuses_more_than_the_cap(self, client):
+        # /generate is the one route that writes group state without going
+        # through _persist_form_state, so it needs its own ceiling: unbounded,
+        # 100 valid groups from a 16 KB POST persist in full and make every
+        # later GET / render ~6 MB.
+        data = {}
+        for i in range(routes._MAX_GROUPS + 1):
+            data[f"group[{i}][title]"] = f"G{i}"
+            data[f"group[{i}][colour]"] = "#ff0000"
+            data[f"group[{i}][countries][]"] = ["se"]
+
+        resp = client.post("/generate", data=data)
+
+        assert resp.status_code == 200
+        assert f"at most {routes._MAX_GROUPS} groups" in resp.get_data(as_text=True)
+        with client.session_transaction() as s:
+            assert "last_groups" not in s
+            assert "generated_groups" not in s
+
+    def test_generate_accepts_exactly_the_cap(self, client):
+        data = {}
+        for i in range(routes._MAX_GROUPS):
+            data[f"group[{i}][title]"] = f"G{i}"
+            data[f"group[{i}][colour]"] = "#ff0000"
+            data[f"group[{i}][countries][]"] = ["se"]
+
+        resp = client.post("/generate", data=data)
+
+        assert resp.status_code == 200
+        assert "at most" not in resp.get_data(as_text=True)
+        with client.session_transaction() as s:
+            assert len(s["last_groups"]) == routes._MAX_GROUPS
 
     def test_add_is_capped(self, client):
         client.post("/add-group", data=self._form(routes._MAX_GROUPS))
@@ -1131,6 +1343,47 @@ class TestDownload:
         resp = client.get("/download")
         assert resp.status_code == 400
 
+    _GENERATE_FORM = {
+        "group[0][title]": "Members",
+        "group[0][colour]": "#ff0000",
+        "group[0][countries][]": ["se"],
+    }
+
+    @pytest.mark.parametrize(
+        ("path", "data"),
+        [
+            ("/add-group", _GENERATE_FORM),
+            ("/remove-group", {**_GENERATE_FORM, "remove": "0"}),
+            ("/reset-land-colour", _GENERATE_FORM),
+        ],
+    )
+    def test_editing_the_form_does_not_break_a_generated_download(self, client, path, data):
+        # /download renders from the generated key, never from in-progress form
+        # state: /add-group appends a blank group, which _build_groups rejects,
+        # and removing the last group leaves another. Sharing one key means a
+        # download 400s for a map that generated fine.
+        client.post("/generate", data=self._GENERATE_FORM)
+        assert client.get("/download").status_code == 200
+
+        client.post(path, data=data)
+
+        assert client.get("/download").status_code == 200
+
+    def test_import_drops_the_previous_download(self, client):
+        # The form no longer matches what was generated, and an imported group
+        # can carry an empty colour that _build_groups rejects.
+        client.post("/generate", data=self._GENERATE_FORM)
+        svg = _generated_svg(groups=[Group("Imported", "#00ff00", ("de",))])
+        client.post(
+            "/import",
+            data={"svg": (io.BytesIO(svg.encode()), "map.svg")},
+            content_type="multipart/form-data",
+        )
+
+        resp = client.get("/download")
+        assert resp.status_code == 400
+        assert "No generated map in session." in resp.get_data(as_text=True)
+
     def test_returns_svg_after_generate(self, client):
         client.post(
             "/generate",
@@ -1152,7 +1405,7 @@ class TestDownload:
 
     def test_returns_400_when_session_data_is_corrupted(self, client):
         with client.session_transaction() as sess:
-            sess["last_groups"] = [
+            sess["generated_groups"] = [
                 {
                     "index": 0,
                     "title": "OK",
@@ -1183,7 +1436,7 @@ class TestDownload:
             ),
         )
         with client.session_transaction() as sess:
-            sess["last_groups"] = [
+            sess["generated_groups"] = [
                 {
                     "index": 0,
                     "title": "OK",
@@ -1206,7 +1459,7 @@ class TestDownload:
         # build_css re-validates the colour and raises ValueError, which the
         # download handler must catch and surface as a 400 rather than a 500.
         with client.session_transaction() as sess:
-            sess["last_groups"] = [
+            sess["generated_groups"] = [
                 {
                     "index": 0,
                     "title": "OK",
@@ -1222,7 +1475,7 @@ class TestDownload:
 
     def test_falls_back_to_default_map_when_session_map_key_unknown(self, client):
         with client.session_transaction() as sess:
-            sess["last_groups"] = [
+            sess["generated_groups"] = [
                 {
                     "index": 0,
                     "title": "OK",

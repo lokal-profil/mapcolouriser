@@ -1,6 +1,17 @@
 {% extends "base.html" %}
 {% block header_actions %}
     <div class="header-actions">
+        {# The form's default button, and it must stay FIRST here: implicit
+           submission (Enter in a text field) activates the first submit button
+           in tree order owned by the form, and the header renders before the
+           form itself. Without this, Enter while typing a group title would
+           click a header Reset instead of submitting — silently reverting a
+           base colour with JS on, posting /reset-land-colour with JS off, and
+           on a map that declares no land or ocean classes, deleting the first
+           group. Visually hidden rather than `hidden`, which engines have
+           skipped for implicit submission. #}
+        <button type="submit" form="colouriser-form" class="visually-hidden"
+                tabindex="-1" aria-hidden="true">Generate map</button>
         {# Re-opened after a no-JS round-trip started from inside the panel
            (the base-colour resets); <details> state isn't submitted, so only
            those routes can know. #}
@@ -100,7 +111,9 @@
 
     {% if warnings %}
         <div class="warnings" role="status">
-            <strong>The import failed or was only partially successful:</strong>
+            {# Neutral heading: /import, /add-group and _persist_form_state all
+               report here, so each message carries its own context. #}
+            <strong>Please note:</strong>
             <ul>
                 {% for warning in warnings %}<li>{{ warning }}</li>{% endfor %}
             </ul>
@@ -117,7 +130,9 @@
               data-map-key="{{ map_key }}">
             <div id="groups">
                 {% for group in groups %}
-                    {# id is the redirect target for the no-JS add/remove routes. #}
+                    {# id is /remove-group's redirect target (it lands on the group
+                       above the one deleted). /add-group deliberately sends no
+                       fragment — one would suppress its autofocus. #}
                     <div class="group" id="group-{{ group.index }}" data-index="{{ group.index }}">
                         <div class="group-row">
                             <label>
@@ -127,6 +142,7 @@
                                 <input name="group[{{ group.index }}][title]" type="text"
                                        value="{{ group.title }}"
                                        pattern="{{ title_pattern }}"
+                                       maxlength="{{ max_title_len }}"
                                        title="Letters, digits, spaces, and basic punctuation only — no &lt;, &gt;, /, * or \"
                                        {% if group.index == focus_group %}autofocus{% endif %}
                                        required />
@@ -192,6 +208,7 @@
                     Title
                     <input name="group[__INDEX__][title]" type="text"
                            pattern="{{ title_pattern }}"
+                           maxlength="{{ max_title_len }}"
                            title="Letters, digits, spaces, and basic punctuation only — no &lt;, &gt;, /, * or \"
                            required />
                 </label>

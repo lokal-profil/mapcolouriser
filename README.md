@@ -90,6 +90,7 @@ toolforge webservice buildservice restart --mount=none
 - User CSS is appended as a `<style id="map-colouriser-style" data-map="…">` element just before the closing `</svg>`; the on-disk SVG file is never modified. The `data-map` attribute records which base map produced the file so it can later be re-imported.
 - User CSS wins the cascade because it's appended after the SVG's native `<style id="style_css_sheet">` block. In particular, the Advanced "Land fill" / "Ocean fill" pickers always override the base SVG's own land / ocean fills whenever the pickers are visible.
 - When only one map is registered, the "Advanced" disclosure shows just the small-country circles toggle and the base-colour pickers (the base-map selector is omitted entirely).
+- Form state is remembered in the signed Flask session cookie, which browsers cap at around 4 KB, so it is bounded: at most 30 groups, and group titles limited to 100 characters. A submission over the group limit is refused with a message, and if the state still wouldn't fit, the last state that did is kept and the page says so — better than exceeding the cookie limit, which makes the browser discard it and silently lose everything typed so far.
 
 ## Credits
 

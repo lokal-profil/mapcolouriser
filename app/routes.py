@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 from typing import Any
 
@@ -40,18 +41,38 @@ _GROUP_KEY_RE = re.compile(r"^group\[(\d+)\]")
 # coupling so app.colouriser stays a pure leaf module. Computed once at import.
 _VALID_CODES = frozenset(code for _, code in all_countries())
 
-# Upper bound for the no-JS add-group route. Groups live in the ~4 KB session
-# cookie, and an oversized cookie is dropped silently, so the route that can be
-# POSTed in a loop needs a ceiling. Measured against the submitted list length,
-# never a high-water mark: removing groups frees the allowance again.
+# Bounds on what may be stored in the ~4 KB session cookie, enforced in
+# _persist_form_state (the shared writer) rather than at any one route: an
+# oversized cookie is dropped silently, and a large group list also makes every
+# later GET / re-render a ~250-option select per group. Measured against the
+# submitted list length, never a high-water mark, so removing groups frees the
+# allowance again. Neither is a hard size guarantee — a group can select every
+# country — but together they bound what one request can persist.
 _MAX_GROUPS = 30
+_MAX_TITLE_LEN = 100
+# Budget for the JSON form of the group list. The signed cookie must stay under
+# the browsers' ~4093-byte ceiling once the other session keys and the signature
+# are added, and base64 inflates the payload by a third, so the raw JSON gets a
+# deliberately conservative slice of it.
+_MAX_SESSION_GROUP_BYTES = 2500
 
 _SESSION_MAP_KEY = "map_key"
+# What the *form* shows. Written by every route that edits the form, so it holds
+# in-progress state that need not be renderable (a blank group, a half-typed
+# title). `GET /` repopulates from it.
 _SESSION_LAST_GROUPS = "last_groups"
+# What `/download` re-renders. Written only where the groups are known to build
+# — `/generate` after validation — so an edit to the form can't break the
+# download of a map that already generated. Never read by `GET /`.
+_SESSION_GENERATED_GROUPS = "generated_groups"
 _SESSION_INCLUDE_CIRCLES = "include_circles"
 _SESSION_LAND_COLOUR = "land_colour"
 _SESSION_OCEAN_COLOUR = "ocean_colour"
-_SESSION_IMPORT_WARNINGS = "import_warnings"
+# Non-blocking messages for the next render, popped by `GET /`. Deliberately
+# not import-specific: /import, /add-group and _persist_form_state all report
+# through it, so each message must be a self-contained sentence rather than
+# relying on a heading to supply the context.
+_SESSION_WARNINGS = "warnings"
 # Transient like the warnings above: set by /add-group, popped by the next
 # GET / so the new group's title field takes focus once and not on a refresh.
 _SESSION_FOCUS_GROUP = "focus_group"
@@ -73,7 +94,7 @@ def index() -> str:
             land_colour=session.get(_SESSION_LAND_COLOUR, DEFAULT_LAND_COLOUR),
             ocean_colour=session.get(_SESSION_OCEAN_COLOUR, DEFAULT_OCEAN_COLOUR),
             include_circles=bool(session.get(_SESSION_INCLUDE_CIRCLES, False)),
-            warnings=session.pop(_SESSION_IMPORT_WARNINGS, []),
+            warnings=session.pop(_SESSION_WARNINGS, []),
             focus_group=session.pop(_SESSION_FOCUS_GROUP, None),
             open_panel=session.pop(_SESSION_OPEN_PANEL, None),
         ),
@@ -107,6 +128,9 @@ def generate() -> Response | str:
 
     session[_SESSION_MAP_KEY] = map_key
     session[_SESSION_LAST_GROUPS] = raw_groups
+    # The one place both keys agree: these groups just rendered, so they are
+    # both what the form shows and what `/download` may re-render.
+    session[_SESSION_GENERATED_GROUPS] = raw_groups
     session[_SESSION_INCLUDE_CIRCLES] = include_circles
     session[_SESSION_LAND_COLOUR] = land_colour
     session[_SESSION_OCEAN_COLOUR] = ocean_colour
@@ -118,6 +142,7 @@ def generate() -> Response | str:
 def reset() -> Response:
     """Clear stored form state and send the user back to a fresh form."""
     session.pop(_SESSION_LAST_GROUPS, None)
+    session.pop(_SESSION_GENERATED_GROUPS, None)
     session.pop(_SESSION_MAP_KEY, None)
     session.pop(_SESSION_INCLUDE_CIRCLES, None)
     session.pop(_SESSION_LAND_COLOUR, None)
@@ -136,23 +161,28 @@ def add_group() -> Response:
     view; when the cap meant nothing was added, a ``#groups`` anchor stands in.
     """
     raw_groups = _parse_groups(request.form)
-    # No fragment on the success path: a URL fragment suppresses autofocus
-    # (the HTML spec treats it as user input outranking the document's default),
-    # and focusing the new title field scrolls it into view anyway. The capped
-    # path sets no autofocus, so it still needs the anchor to land usefully.
-    anchor = "groups"
-    if len(raw_groups) < _MAX_GROUPS:
-        # max + 1, matching nextIndex() in main.js: indices are never reused, so
-        # a new group can't inherit the palette default of a group that is still
-        # on the form (see the `default_colours[index % len]` fallback).
-        next_index = max((g["index"] for g in raw_groups), default=-1) + 1
-        raw_groups.append({"index": next_index, "title": "", "colour": "", "countries": []})
-        # Put the cursor in the new group's title field the way the JS path
-        # does; that also scrolls it into view, so no anchor is wanted.
-        anchor = None
-        session[_SESSION_FOCUS_GROUP] = next_index
+    if not raw_groups or len(raw_groups) >= _MAX_GROUPS:
+        # Nothing to append to, or the ceiling is reached. Either way no group
+        # was added, so there is no autofocus to scroll the page and the list
+        # anchor stands in. Say so — a full reload with nothing added and no
+        # message reads as a broken button.
+        if raw_groups:
+            _warn(f"You can have at most {_MAX_GROUPS} groups. Remove one to add another.")
+        _persist_form_state(raw_groups)
+        return redirect(url_for("main.index", _anchor="groups"))
+
+    # max + 1, matching nextIndex() in main.js: indices are never reused, so a
+    # new group can't inherit the palette default of a group that is still on
+    # the form (see the `default_colours[index % len]` fallback).
+    next_index = max(g["index"] for g in raw_groups) + 1
+    raw_groups.append({"index": next_index, "title": "", "colour": "", "countries": []})
+    # Put the cursor in the new group's title field the way the JS path does.
+    # That also scrolls it into view, so this redirect must carry no fragment:
+    # a URL fragment suppresses autofocus, the HTML spec ranking it above the
+    # document's default.
+    session[_SESSION_FOCUS_GROUP] = next_index
     _persist_form_state(raw_groups)
-    return redirect(url_for("main.index", _anchor=anchor))
+    return redirect(url_for("main.index"))
 
 
 @bp.post("/remove-group")
@@ -176,16 +206,19 @@ def remove_group() -> Response:
     # Land on the group above the one removed, so a deletion low in a long list
     # doesn't throw the user back to the top. Removing the first group (or
     # anything unrecognized) falls back to the head of the list, which is where
-    # they were looking anyway.
+    # they were looking anyway. An unparseable index leaves `target` None, which
+    # matches no group, so the lookup below covers that case too.
     anchor = "groups"
-    if target is not None:
-        position = next((i for i, g in enumerate(raw_groups) if g["index"] == target), None)
-        if position is not None:
-            if position > 0:
-                anchor = f"group-{raw_groups[position - 1]['index']}"
-            raw_groups = [g for g in raw_groups if g["index"] != target]
+    position = next((i for i, g in enumerate(raw_groups) if g["index"] == target), None)
+    if position is not None:
+        if position > 0:
+            anchor = f"group-{raw_groups[position - 1]['index']}"
+        # Removing the only group leaves one blank group rather than none, but
+        # only once something was actually removed — a request carrying no
+        # groups at all must not overwrite the stored ones with a blank.
+        raw_groups = [g for g in raw_groups if g["index"] != target] or _default_form_state(1)
 
-    _persist_form_state(raw_groups or _default_form_state(1))
+    _persist_form_state(raw_groups)
     return redirect(url_for("main.index", _anchor=anchor))
 
 
@@ -204,15 +237,16 @@ def reset_ocean_colour() -> Response:
 def _reset_base_colour(session_key: str) -> Response:
     """Drop one base-colour override and send the user back to the form.
 
-    Land and ocean get a route each, so which colour is reset comes from the
-    URL and there is no request value to validate. The key is *removed* rather
+    Land and ocean get a route each, so no request value decides *which* colour
+    is reset (the rest of the submitted form still goes through
+    ``_persist_form_state``, which validates it). The key is *removed* rather
     than set to the default: ``GET /``
     reads these with ``session.get(key, DEFAULT_…)``, so absence is how "not
     overridden" is spelled — the same thing ``/reset`` does wholesale.
 
-    The pop has to follow ``_persist_form_state``, which writes both colours
-    from the submitted form. Re-opens the Advanced panel, since that is where
-    the button the user clicked lives.
+    The pop has to follow ``_persist_form_state``, which writes back whichever
+    colours the form submitted. Re-opens the Advanced panel, since that is
+    where the button the user clicked lives.
     """
     _persist_form_state(_parse_groups(request.form))
     session.pop(session_key, None)
@@ -229,7 +263,7 @@ def import_svg_route() -> Response:
     """
     file = request.files.get("svg")
     if not file:
-        session[_SESSION_IMPORT_WARNINGS] = ["No file was uploaded."]
+        session[_SESSION_WARNINGS] = ["No file was uploaded."]
         return redirect(url_for("main.index"))
 
     result = svg_import.import_svg(
@@ -239,6 +273,12 @@ def import_svg_route() -> Response:
 
     if result.groups:
         session[_SESSION_LAST_GROUPS] = result.groups
+        # The form no longer matches whatever was generated before, and an
+        # import can legitimately yield a group with an empty colour (a
+        # malformed one becomes a palette default at render time), which
+        # `_build_groups` would reject. Drop the download rather than serve a
+        # stale map or a 400.
+        session.pop(_SESSION_GENERATED_GROUPS, None)
         session[_SESSION_MAP_KEY] = result.map_key
         # Only overwrite land/ocean when a colour was actually recovered, so a
         # fallback import doesn't clobber the user's current Advanced settings.
@@ -250,7 +290,11 @@ def import_svg_route() -> Response:
         # whenever any groups were recovered.
         session[_SESSION_INCLUDE_CIRCLES] = result.include_circles
 
-    session[_SESSION_IMPORT_WARNINGS] = result.warnings
+    if result.warnings:
+        # The message box is shared, so each source states its own context.
+        _warn("The import failed or was only partially successful.")
+        for warning in result.warnings:
+            _warn(warning)
     return redirect(url_for("main.index"))
 
 
@@ -267,7 +311,10 @@ def base_map(key: str) -> Response:
 
 @bp.get("/download")
 def download() -> Response:
-    raw_groups = session.get(_SESSION_LAST_GROUPS)
+    # Deliberately the generated key, not the form key: editing the form (adding
+    # a blank group, say) must not break the download of a map that already
+    # rendered.
+    raw_groups = session.get(_SESSION_GENERATED_GROUPS)
     map_key = session.get(_SESSION_MAP_KEY, DEFAULT_MAP)
     include_circles = bool(session.get(_SESSION_INCLUDE_CIRCLES, False))
     land_colour = session.get(_SESSION_LAND_COLOUR, DEFAULT_LAND_COLOUR)
@@ -347,6 +394,7 @@ def _index_context(
         "errors": errors,
         "warnings": warnings or [],
         "title_pattern": TITLE_PATTERN,
+        "max_title_len": _MAX_TITLE_LEN,
         "colour_pattern": COLOUR_PATTERN,
         "default_colours": DEFAULT_GROUP_COLOURS,
         "default_land_colour": DEFAULT_LAND_COLOUR,
@@ -373,31 +421,75 @@ def _build_groups(raw_groups: list[dict[str, Any]]) -> list[Group]:
     ]
 
 
+def _warn(message: str) -> None:
+    """Queue a non-blocking message for the next ``GET /`` to show and pop.
+
+    Appends rather than replaces: one request can hit more than one of these
+    (a cap message and an oversized-state message, say).
+    """
+    session[_SESSION_WARNINGS] = [*session.get(_SESSION_WARNINGS, []), message]
+
+
 def _default_form_state(count: int = 2) -> list[dict[str, Any]]:
     return [{"index": i, "title": "", "colour": "", "countries": []} for i in range(count)]
 
 
 def _persist_form_state(raw_groups: list[dict[str, Any]]) -> None:
-    """Store groups plus the form's Advanced settings for the next ``GET /``.
+    """Store in-progress form state for the next ``GET /``.
 
-    Used by the add/remove-group routes, which round-trip the whole form so the
-    user's typed values survive. Unlike ``/generate`` these routes don't
-    validate, so the base map and land/ocean colours are only written when they
-    are usable, leaving the previous session value in place otherwise (the rule
-    ``/import`` follows too). Nothing downstream trusts them blindly —
-    ``/download`` normalises an unknown map key and answers 400 on a colour
-    ``build_css`` rejects — but a session poisoned from here would break the
-    user's next download until they submitted the form again.
+    Called by the add/remove-group routes and both base-colour reset routes,
+    which round-trip the whole form so the user's typed values survive. Unlike
+    ``/generate`` none of them validate, so this is the chokepoint that keeps
+    the session sane, and every rule below exists because one of these routes
+    can be POSTed directly:
+
+    * groups are clamped to ``_MAX_GROUPS`` and titles to ``_MAX_TITLE_LEN``.
+      The cap on ``/add-group`` only stops the button growing the list; without
+      a clamp here a single hand-made POST persists any number of groups, and
+      each one re-renders a ~250-option select on every later ``GET /``.
+    * an empty list is not written at all. A request carrying no ``group[…]``
+      fields means "no group data in this request", not "delete their groups".
+    * the base map and each colour are written independently, and only when the
+      field is present and usable. One malformed colour must not discard the
+      other, and a map that doesn't render the ocean row posts no ocean field —
+      that is silence, not a request to reset the stored value.
     """
-    session[_SESSION_LAST_GROUPS] = raw_groups
+    if raw_groups:
+        clamped = [{**g, "title": g["title"][:_MAX_TITLE_LEN]} for g in raw_groups[:_MAX_GROUPS]]
+        # Even clamped, a full form can outgrow the cookie: 30 groups each
+        # selecting many countries serialises past the ~4 KB limit, at which
+        # point the browser drops the whole cookie and the user loses every
+        # value they typed with nothing on screen to explain it. Refuse the
+        # write instead, keeping the last state that did fit, and say so.
+        if len(json.dumps(clamped)) > _MAX_SESSION_GROUP_BYTES:
+            current_app.logger.warning(
+                "persist_form_state: group state too large to store (%d groups)", len(clamped)
+            )
+            _warn(
+                "That's too much to remember between page loads — your last saved groups "
+                "were kept. Remove a group or some countries, then try again."
+            )
+        else:
+            session[_SESSION_LAST_GROUPS] = clamped
     session[_SESSION_INCLUDE_CIRCLES] = request.form.get("circles") == "1"
-    map_key = request.form.get("map") or DEFAULT_MAP
+
+    map_key = request.form.get("map")
     if map_key in MAPS:
         session[_SESSION_MAP_KEY] = map_key
-    land_colour, ocean_colour, base_errors = _resolve_base_colours(request.form)
-    if not base_errors:
-        session[_SESSION_LAND_COLOUR] = land_colour
-        session[_SESSION_OCEAN_COLOUR] = ocean_colour
+    elif map_key:
+        current_app.logger.warning("persist_form_state: unknown map key %r", map_key)
+
+    for field, key in (
+        ("land_colour", _SESSION_LAND_COLOUR),
+        ("ocean_colour", _SESSION_OCEAN_COLOUR),
+    ):
+        value = (request.form.get(field) or "").strip()
+        if not value:
+            continue
+        if _COLOUR_RE.match(value):
+            session[key] = value
+        else:
+            current_app.logger.info("persist_form_state: rejected %s %r", field, value)
 
 
 def _resolve_base_colours(form) -> tuple[str, str, list[str]]:
@@ -443,6 +535,17 @@ def _validate(groups: list[dict[str, Any]], map_key: str) -> list[str]:
 
     if not groups:
         errors.append("At least one group is required.")
+        return errors
+
+    # The only route that writes group state without going through
+    # _persist_form_state, so the ceiling has to be repeated here or /generate
+    # stays an open door: a 16 KB POST of 100 valid groups persists all of them
+    # and makes every later GET / render ~6 MB (each group repeats a ~250-option
+    # select). Rejected rather than clamped — this is a real submit, and
+    # silently dropping groups 31+ would hand back a map missing data the user
+    # deliberately built.
+    if len(groups) > _MAX_GROUPS:
+        errors.append(f"You can have at most {_MAX_GROUPS} groups.")
         return errors
 
     for g in groups:

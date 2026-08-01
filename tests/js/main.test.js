@@ -647,7 +647,8 @@ describe("createApp", () => {
         });
 
         it("treats an uppercase default as the default", async () => {
-            // Was the template's `| lower` comparison; now syncResetState's.
+            // syncResetState lowercases both sides, so #DDDDDD counts as the
+            // default and leaves Reset disabled.
             document.getElementById("land-colour").setAttribute("value", "#DDDDDD");
             document.getElementById("reset-land").disabled = false;
 

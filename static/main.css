@@ -384,6 +384,23 @@ html.live-preview .live-preview-toggle:hover .switch,
     html.live-preview .preview-pane { position: sticky; top: 1rem; }
 }
 
+/* Removed from view but still in the accessibility tree and, crucially, still
+   a submit button the browser will pick for implicit submission — unlike
+   display:none or [hidden]. Used for the form's default button in the header
+   (see index.html). */
+.visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    border: 0;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    clip-path: inset(50%);
+    white-space: nowrap;
+}
+
 /* Progressive enhancement: hide JS-only affordances when JS is off,
    and swap between live-preview and fallback flows via a class on
    <html>. */
