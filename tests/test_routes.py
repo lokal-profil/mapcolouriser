@@ -702,11 +702,14 @@ class TestGroupActions:
         data.update(extra)
         return data
 
-    def test_add_appends_a_blank_group_and_redirects_to_it(self, client):
+    def test_add_appends_a_blank_group_and_redirects_without_a_fragment(self, client):
+        # No fragment on purpose: one would suppress the autofocus that both
+        # scrolls to the new group and puts the cursor in its title field.
         resp = client.post("/add-group", data=self._form(2))
 
         assert resp.status_code == 302
-        assert resp.headers["Location"].endswith("/#group-2")
+        assert resp.headers["Location"].endswith("/")
+        assert "#" not in resp.headers["Location"]
         with client.session_transaction() as s:
             assert [g["index"] for g in s["last_groups"]] == [0, 1, 2]
             assert s["last_groups"][2] == {
@@ -741,13 +744,43 @@ class TestGroupActions:
         with client.session_transaction() as s:
             assert [g["index"] for g in s["last_groups"]] == [0, 2, 3]
 
+    def test_add_autofocuses_the_new_group_title(self, client):
+        client.post("/add-group", data=self._form(2))
+
+        body = client.get("/").get_data(as_text=True)
+        new_group = body.split('id="group-2"', 1)[1]
+        assert "autofocus" in new_group.split("</div>", 1)[0]
+        # Exactly one field on the page claims focus.
+        assert body.count("autofocus") == 1
+
+    def test_autofocus_is_consumed_by_the_first_render(self, client):
+        # Transient like import_warnings — a refresh must not re-steal focus.
+        client.post("/add-group", data=self._form(2))
+        client.get("/")
+
+        assert "autofocus" not in client.get("/").get_data(as_text=True)
+
+    def test_no_autofocus_without_an_add(self, client):
+        assert "autofocus" not in client.get("/").get_data(as_text=True)
+
+    def test_add_at_the_cap_sets_no_autofocus(self, client):
+        client.post("/add-group", data=self._form(routes._MAX_GROUPS))
+
+        assert "autofocus" not in client.get("/").get_data(as_text=True)
+
+    def test_remove_sets_no_autofocus(self, client):
+        client.post("/remove-group", data=self._form(3, remove="1"))
+
+        assert "autofocus" not in client.get("/").get_data(as_text=True)
+
     def test_group_anchors_are_rendered(self, client):
         # The ids the add/remove redirects target.
         body = client.get("/").get_data(as_text=True)
         assert 'id="group-0"' in body
         assert 'id="group-1"' in body
 
-    def test_add_at_the_cap_redirects_to_the_list_since_nothing_was_added(self, client):
+    def test_add_at_the_cap_falls_back_to_the_list_anchor(self, client):
+        # Nothing was added, so there's no autofocus to scroll the page.
         resp = client.post("/add-group", data=self._form(routes._MAX_GROUPS))
 
         assert resp.headers["Location"].endswith("/#groups")

@@ -195,9 +195,18 @@ export function createApp(doc = document) {
         const fragment = tmpl.content.cloneNode(true);
         patchPlaceholders(fragment, idx);
         applyDefaultColour(fragment, idx);
+        // Captured before appendChild empties the fragment; the reference stays
+        // valid once the node is attached.
+        const groupEl = fragment.querySelector(".group");
         groupsContainer.appendChild(fragment);
         enhanceCountrySelects();
         updateActionState();
+        // Focus last, so nothing above steals it back. The no-JS path gets the
+        // same landing spot via autofocus (see _SESSION_FOCUS_GROUP). Selected
+        // by name, not input[type=text] — the enhanced country widget adds a
+        // text input of its own inside the group.
+        const titleInput = groupEl && groupEl.querySelector(`input[name="group[${idx}][title]"]`);
+        if (titleInput) titleInput.focus();
         requestUpdate();
     }
 

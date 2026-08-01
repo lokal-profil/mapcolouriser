@@ -111,10 +111,13 @@
                         <div class="group-row">
                             <label>
                                 Title
+                                {# autofocus only on the render right after a no-JS
+                                   "Add group"; the JS path focuses in addGroup(). #}
                                 <input name="group[{{ group.index }}][title]" type="text"
                                        value="{{ group.title }}"
                                        pattern="{{ title_pattern }}"
                                        title="Letters, digits, spaces, and basic punctuation only — no &lt;, &gt;, /, * or \"
+                                       {% if group.index == focus_group %}autofocus{% endif %}
                                        required />
                             </label>
                             <label>

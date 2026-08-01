@@ -52,6 +52,9 @@ _SESSION_INCLUDE_CIRCLES = "include_circles"
 _SESSION_LAND_COLOUR = "land_colour"
 _SESSION_OCEAN_COLOUR = "ocean_colour"
 _SESSION_IMPORT_WARNINGS = "import_warnings"
+# Transient like the warnings above: set by /add-group, popped by the next
+# GET / so the new group's title field takes focus once and not on a refresh.
+_SESSION_FOCUS_GROUP = "focus_group"
 
 
 @bp.get("/")
@@ -66,6 +69,7 @@ def index() -> str:
             ocean_colour=session.get(_SESSION_OCEAN_COLOUR, DEFAULT_OCEAN_COLOUR),
             include_circles=bool(session.get(_SESSION_INCLUDE_CIRCLES, False)),
             warnings=session.pop(_SESSION_IMPORT_WARNINGS, []),
+            focus_group=session.pop(_SESSION_FOCUS_GROUP, None),
         ),
     )
 
@@ -122,10 +126,14 @@ def add_group() -> Response:
     With JS the button's click handler cancels the submit and clones the group
     template client-side; this is the fallback that does the same thing over a
     round-trip. Not a submit attempt, so nothing is validated or rendered.
-    Redirects to the new group (``#group-<index>``), or the top of the list
-    when the cap meant nothing was added.
+    The new group's title field is autofocused, which also scrolls it into
+    view; when the cap meant nothing was added, a ``#groups`` anchor stands in.
     """
     raw_groups = _parse_groups(request.form)
+    # No fragment on the success path: a URL fragment suppresses autofocus
+    # (the HTML spec treats it as user input outranking the document's default),
+    # and focusing the new title field scrolls it into view anyway. The capped
+    # path sets no autofocus, so it still needs the anchor to land usefully.
     anchor = "groups"
     if len(raw_groups) < _MAX_GROUPS:
         # max + 1, matching nextIndex() in main.js: indices are never reused, so
@@ -133,8 +141,10 @@ def add_group() -> Response:
         # on the form (see the `default_colours[index % len]` fallback).
         next_index = max((g["index"] for g in raw_groups), default=-1) + 1
         raw_groups.append({"index": next_index, "title": "", "colour": "", "countries": []})
-        # Land on the group just added, not the top of the list.
-        anchor = f"group-{next_index}"
+        # Put the cursor in the new group's title field the way the JS path
+        # does; that also scrolls it into view, so no anchor is wanted.
+        anchor = None
+        session[_SESSION_FOCUS_GROUP] = next_index
     _persist_form_state(raw_groups)
     return redirect(url_for("main.index", _anchor=anchor))
 
@@ -281,6 +291,7 @@ def _index_context(
     ocean_colour: str,
     include_circles: bool,
     warnings: list[str] | None = None,
+    focus_group: int | None = None,
 ) -> dict[str, Any]:
     """Build the shared template context for the index form.
 
@@ -288,7 +299,8 @@ def _index_context(
     (growing) kwarg set lives in one place. ``map_key`` is clamped to a known
     map here, so callers may pass a raw session/form value. ``warnings`` is a
     real key (default empty) so the ``/generate`` path never leaves the
-    template iterating an undefined value.
+    template iterating an undefined value; ``focus_group`` likewise defaults to
+    ``None`` so only the render right after a no-JS add carries an autofocus.
     """
     safe_key = map_key if map_key in MAPS else DEFAULT_MAP
     return {
@@ -307,6 +319,7 @@ def _index_context(
         "current_map": MAPS[safe_key],
         "maps": MAPS,
         "include_circles": include_circles,
+        "focus_group": focus_group,
     }
 
 

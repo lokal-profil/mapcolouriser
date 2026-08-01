@@ -243,6 +243,17 @@ describe("createApp", () => {
             expect(colourInputs[3].value).toBe(PALETTE[0]);
         });
 
+        it("focuses the new group's title field", () => {
+            // Parity with the no-JS path, which lands there via autofocus.
+            const app = createApp();
+            app.addGroup();
+            app.addGroup();
+
+            // By name: the enhanced country widget also renders a text input.
+            const title = document.querySelector('input[name="group[1][title]"]');
+            expect(document.activeElement).toBe(title);
+        });
+
         it("patches the data-index and name placeholders on the cloned template", () => {
             const app = createApp();
             app.addGroup();
