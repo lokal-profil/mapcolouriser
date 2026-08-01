@@ -702,11 +702,11 @@ class TestGroupActions:
         data.update(extra)
         return data
 
-    def test_add_appends_a_blank_group_and_redirects_to_the_group_list(self, client):
+    def test_add_appends_a_blank_group_and_redirects_to_it(self, client):
         resp = client.post("/add-group", data=self._form(2))
 
         assert resp.status_code == 302
-        assert resp.headers["Location"].endswith("/#groups")
+        assert resp.headers["Location"].endswith("/#group-2")
         with client.session_transaction() as s:
             assert [g["index"] for g in s["last_groups"]] == [0, 1, 2]
             assert s["last_groups"][2] == {
@@ -740,6 +740,53 @@ class TestGroupActions:
 
         with client.session_transaction() as s:
             assert [g["index"] for g in s["last_groups"]] == [0, 2, 3]
+
+    def test_group_anchors_are_rendered(self, client):
+        # The ids the add/remove redirects target.
+        body = client.get("/").get_data(as_text=True)
+        assert 'id="group-0"' in body
+        assert 'id="group-1"' in body
+
+    def test_add_at_the_cap_redirects_to_the_list_since_nothing_was_added(self, client):
+        resp = client.post("/add-group", data=self._form(routes._MAX_GROUPS))
+
+        assert resp.headers["Location"].endswith("/#groups")
+
+    @pytest.mark.parametrize(
+        ("removed", "expected"),
+        [
+            ("1", "/#group-0"),  # mid-list: land on the group above
+            ("2", "/#group-1"),  # last: land on the group above
+            ("0", "/#groups"),  # first: no group above, so the head of the list
+        ],
+    )
+    def test_remove_redirects_to_the_group_above(self, client, removed, expected):
+        resp = client.post("/remove-group", data=self._form(3, remove=removed))
+
+        assert resp.headers["Location"].endswith(expected)
+
+    def test_remove_redirects_to_the_list_when_the_index_is_unusable(self, client):
+        resp = client.post("/remove-group", data=self._form(3, remove="99"))
+
+        assert resp.headers["Location"].endswith("/#groups")
+
+    def test_removing_the_only_group_redirects_to_the_list(self, client):
+        resp = client.post("/remove-group", data=self._form(1, remove="0"))
+
+        assert resp.headers["Location"].endswith("/#groups")
+
+    def test_remove_anchor_uses_the_preceding_index_not_position(self, client):
+        # Sparse indices (0, 5, 9): removing 9 must land on 5, not on "group-1".
+        data = {}
+        for i in (0, 5, 9):
+            data[f"group[{i}][title]"] = f"G{i}"
+            data[f"group[{i}][colour]"] = "#ff0000"
+            data[f"group[{i}][countries][]"] = ["se"]
+        data["remove"] = "9"
+
+        resp = client.post("/remove-group", data=data)
+
+        assert resp.headers["Location"].endswith("/#group-5")
 
     def test_remove_drops_the_posted_index_only(self, client):
         client.post("/remove-group", data=self._form(3, remove="1"))

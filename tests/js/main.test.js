@@ -42,7 +42,7 @@ const FIXTURE_HTML = `<!doctype html>
         <button type="button" id="reset-ocean" class="js-only base-colour-reset" disabled>Reset</button>
     </div>
     <template id="group-template">
-        <div class="group" data-index="__INDEX__">
+        <div class="group" id="group-__INDEX__" data-index="__INDEX__">
             <input name="group[__INDEX__][title]" type="text" />
             <input name="group[__INDEX__][colour]" type="color" />
             <select id="countries-__INDEX__" name="group[__INDEX__][countries][]" multiple>
@@ -259,6 +259,9 @@ describe("createApp", () => {
             const ids = Array.from(document.querySelectorAll('select[id^="countries-"]'))
                 .map(el => el.id);
             expect(ids).toEqual(["countries-0", "countries-1"]);
+            // The group ids the no-JS add/remove redirects anchor to.
+            expect(Array.from(document.querySelectorAll(".group")).map(el => el.id))
+                .toEqual(["group-0", "group-1"]);
             // No literal placeholder leaks through.
             expect(document.querySelector('[id*="__INDEX__"]')).toBeNull();
         });

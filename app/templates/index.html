@@ -106,7 +106,8 @@
               data-map-key="{{ map_key }}">
             <div id="groups">
                 {% for group in groups %}
-                    <div class="group" data-index="{{ group.index }}">
+                    {# id is the redirect target for the no-JS add/remove routes. #}
+                    <div class="group" id="group-{{ group.index }}" data-index="{{ group.index }}">
                         <div class="group-row">
                             <label>
                                 Title
@@ -171,7 +172,7 @@
 
     {# Hidden template for cloning new group blocks. #}
     <template id="group-template">
-        <div class="group" data-index="__INDEX__">
+        <div class="group" id="group-__INDEX__" data-index="__INDEX__">
             <div class="group-row">
                 <label>
                     Title

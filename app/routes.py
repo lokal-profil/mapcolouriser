@@ -122,21 +122,29 @@ def add_group() -> Response:
     With JS the button's click handler cancels the submit and clones the group
     template client-side; this is the fallback that does the same thing over a
     round-trip. Not a submit attempt, so nothing is validated or rendered.
+    Redirects to the new group (``#group-<index>``), or the top of the list
+    when the cap meant nothing was added.
     """
     raw_groups = _parse_groups(request.form)
+    anchor = "groups"
     if len(raw_groups) < _MAX_GROUPS:
         # max + 1, matching nextIndex() in main.js: indices are never reused, so
         # a new group can't inherit the palette default of a group that is still
         # on the form (see the `default_colours[index % len]` fallback).
         next_index = max((g["index"] for g in raw_groups), default=-1) + 1
         raw_groups.append({"index": next_index, "title": "", "colour": "", "countries": []})
+        # Land on the group just added, not the top of the list.
+        anchor = f"group-{next_index}"
     _persist_form_state(raw_groups)
-    return redirect(url_for("main.index", _anchor="groups"))
+    return redirect(url_for("main.index", _anchor=anchor))
 
 
 @bp.post("/remove-group")
 def remove_group() -> Response:
     """Drop the posted group index and send the user back to the form (no-JS path).
+
+    Redirects to the group above the removed one (``#group-<index>``), or the
+    top of the list when there isn't one.
 
     Removing the only group leaves one blank group rather than none: ``GET /``
     falls back to ``_default_form_state()`` for an empty list, so an empty
@@ -148,10 +156,21 @@ def remove_group() -> Response:
         target = int(request.form.get("remove", ""))
     except ValueError:
         target = None
+
+    # Land on the group above the one removed, so a deletion low in a long list
+    # doesn't throw the user back to the top. Removing the first group (or
+    # anything unrecognized) falls back to the head of the list, which is where
+    # they were looking anyway.
+    anchor = "groups"
     if target is not None:
-        raw_groups = [g for g in raw_groups if g["index"] != target]
+        position = next((i for i, g in enumerate(raw_groups) if g["index"] == target), None)
+        if position is not None:
+            if position > 0:
+                anchor = f"group-{raw_groups[position - 1]['index']}"
+            raw_groups = [g for g in raw_groups if g["index"] != target]
+
     _persist_form_state(raw_groups or _default_form_state(1))
-    return redirect(url_for("main.index", _anchor="groups"))
+    return redirect(url_for("main.index", _anchor=anchor))
 
 
 @bp.post("/import")
