@@ -35,11 +35,14 @@ const FIXTURE_HTML = `<!doctype html>
     <input type="checkbox" id="toggle-circles" name="circles" form="colouriser-form" value="1" />
     <div class="base-colour-row" id="land-colour-row">
         <input type="color" id="land-colour" name="land_colour" form="colouriser-form" value="#dddddd" />
-        <button type="button" id="reset-land" class="js-only base-colour-reset" disabled>Reset</button>
+        <!-- No disabled attribute, matching index.html: JS sets it at init. -->
+        <button type="submit" id="reset-land" class="base-colour-reset" form="colouriser-form"
+                formaction="/reset-land-colour" formnovalidate>Reset</button>
     </div>
     <div class="base-colour-row" id="ocean-colour-row">
         <input type="color" id="ocean-colour" name="ocean_colour" form="colouriser-form" value="#ffffff" />
-        <button type="button" id="reset-ocean" class="js-only base-colour-reset" disabled>Reset</button>
+        <button type="submit" id="reset-ocean" class="base-colour-reset" form="colouriser-form"
+                formaction="/reset-ocean-colour" formnovalidate>Reset</button>
     </div>
     <template id="group-template">
         <div class="group" id="group-__INDEX__" data-index="__INDEX__">
@@ -617,6 +620,44 @@ describe("createApp", () => {
     });
 
     describe("base colour pickers", () => {
+        // The server always renders these enabled — it can't track the picker —
+        // so init() has to establish the state rather than inherit it.
+        it.each([
+            ["reset-land", "land-colour", "#dddddd"],
+            ["reset-ocean", "ocean-colour", "#ffffff"],
+        ])("disables %s at init when the picker is at the default", async (buttonId, pickerId, dflt) => {
+            document.getElementById(buttonId).disabled = false;
+            document.getElementById(pickerId).value = dflt;
+
+            const app = createApp();
+            app.init();
+            await flushMicrotasks();
+
+            expect(document.getElementById(buttonId).disabled).toBe(true);
+        });
+
+        it("leaves Reset enabled at init when the server rendered an override", async () => {
+            document.getElementById("land-colour").value = "#112233";
+
+            const app = createApp();
+            app.init();
+            await flushMicrotasks();
+
+            expect(document.getElementById("reset-land").disabled).toBe(false);
+        });
+
+        it("treats an uppercase default as the default", async () => {
+            // Was the template's `| lower` comparison; now syncResetState's.
+            document.getElementById("land-colour").setAttribute("value", "#DDDDDD");
+            document.getElementById("reset-land").disabled = false;
+
+            const app = createApp();
+            app.init();
+            await flushMicrotasks();
+
+            expect(document.getElementById("reset-land").disabled).toBe(true);
+        });
+
         it("enables the Reset button when the picker value differs from the default", async () => {
             const app = createApp();
             app.init();
@@ -662,6 +703,27 @@ describe("createApp", () => {
             reset.click();
             expect(ocean.value).toBe("#ffffff");
             expect(reset.disabled).toBe(true);
+        });
+
+        it.each([
+            ["reset-land", "land-colour", "#dddddd"],
+            ["reset-ocean", "ocean-colour", "#ffffff"],
+        ])("cancels the submit when %s is clicked", async (buttonId, pickerId, defaultColour) => {
+            // These are type=submit so they post to /reset-{land,ocean}-colour
+            // without JS; with JS the click must not reach the form.
+            const app = createApp();
+            app.init();
+            await flushMicrotasks();
+
+            const picker = document.getElementById(pickerId);
+            picker.value = "#112233";
+            picker.dispatchEvent(new Event("change", { bubbles: true }));
+
+            const event = new MouseEvent("click", { bubbles: true, cancelable: true });
+            document.getElementById(buttonId).dispatchEvent(event);
+
+            expect(event.defaultPrevented).toBe(true);
+            expect(picker.value).toBe(defaultColour);
         });
 
         it("reads base classes from the form dataset when no map selector exists", async () => {

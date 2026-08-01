@@ -536,26 +536,114 @@ class TestBaseColours:
         m = re.search(r'<input[^>]*id="ocean-colour"[^>]*>', body)
         assert m and 'value="#abcdef"' in m.group(0)
 
-    def test_reset_button_disabled_when_picker_at_default(self, client):
-        body = client.get("/").get_data(as_text=True)
-        m = re.search(r'<button[^>]*id="reset-land"[^>]*>', body)
-        assert m and "disabled" in m.group(0)
+    @pytest.mark.parametrize("button", ["reset-land", "reset-ocean"])
+    @pytest.mark.parametrize("stored", [None, "#dddddd", "#DDDDDD", "#112233"])
+    def test_reset_buttons_never_render_disabled(self, client, button, stored):
+        # The server can't keep an "is this overridden?" state truthful while the
+        # user changes the picker, and a disabled button is unclickable — so
+        # without JS the reset would be unreachable exactly when it's wanted.
+        # main.js owns the disabled state (syncResetState); see the JS suite.
+        if stored:
+            with client.session_transaction() as s:
+                s["land_colour"] = stored
+                s["ocean_colour"] = stored
 
-    def test_reset_button_disabled_for_uppercase_default(self, client):
-        # The template compares via `| lower`, so #DDDDDD must count as the
-        # default and leave Reset disabled.
-        with client.session_transaction() as s:
-            s["land_colour"] = self.DEFAULT_LAND.upper()
         body = client.get("/").get_data(as_text=True)
-        m = re.search(r'<button[^>]*id="reset-land"[^>]*>', body)
-        assert m and "disabled" in m.group(0)
+        m = re.search(rf'<button[^>]*id="{button}"[^>]*>', body)
+        assert m and "disabled" not in m.group(0)
 
-    def test_reset_button_enabled_when_picker_overridden(self, client):
+    def _submitted_form(self, **extra):
+        """A form body as the header controls submit it, plus one filled group."""
+        data = {
+            "group[0][title]": "G0",
+            "group[0][colour]": "#ff0000",
+            "group[0][countries][]": ["se"],
+            "map": self.MAP_KEY,
+            "land_colour": "#112233",
+            "ocean_colour": "#abcdef",
+        }
+        data.update(extra)
+        return data
+
+    @pytest.mark.parametrize(
+        ("path", "cleared", "kept"),
+        [
+            ("/reset-land-colour", "land_colour", "ocean_colour"),
+            ("/reset-ocean-colour", "ocean_colour", "land_colour"),
+        ],
+    )
+    def test_reset_clears_one_colour_and_keeps_the_other(self, client, path, cleared, kept):
         with client.session_transaction() as s:
             s["land_colour"] = "#112233"
+            s["ocean_colour"] = "#abcdef"
+
+        resp = client.post(path, data=self._submitted_form())
+
+        assert resp.status_code == 302
+        with client.session_transaction() as s:
+            # Removed, not set to the default — absence is how "not overridden"
+            # is spelled, and GET / fills in the default.
+            assert cleared not in s
+            assert s[kept] == {"land_colour": "#112233", "ocean_colour": "#abcdef"}[kept]
+
+    @pytest.mark.parametrize(
+        ("path", "picker", "default_attr"),
+        [
+            ("/reset-land-colour", "land-colour", "DEFAULT_LAND"),
+            ("/reset-ocean-colour", "ocean-colour", "DEFAULT_OCEAN"),
+        ],
+    )
+    def test_index_after_reset_shows_the_default_in_the_picker(
+        self, client, path, picker, default_attr
+    ):
+        client.post(path, data=self._submitted_form())
+
         body = client.get("/").get_data(as_text=True)
-        m = re.search(r'<button[^>]*id="reset-land"[^>]*>', body)
-        assert m and "disabled" not in m.group(0)
+        picker_tag = re.search(rf'<input[^>]*id="{picker}"[^>]*>', body)
+        assert picker_tag and f'value="{getattr(self, default_attr)}"' in picker_tag.group(0)
+
+    def test_reset_preserves_groups_and_other_settings(self, client):
+        client.post("/reset-land-colour", data=self._submitted_form(circles="1"))
+
+        with client.session_transaction() as s:
+            assert [g["title"] for g in s["last_groups"]] == ["G0"]
+            assert s["map_key"] == self.MAP_KEY
+            assert s["include_circles"] is True
+
+    def test_reset_reopens_the_advanced_panel(self, client):
+        # The button lives inside the <details>, which would otherwise come back
+        # collapsed — the open state isn't part of the submitted form.
+        client.post("/reset-land-colour", data=self._submitted_form())
+
+        body = client.get("/").get_data(as_text=True)
+        panel = re.search(r"<details[^>]*advanced-settings[^>]*>", body)
+        assert panel and "open" in panel.group(0)
+
+    def test_reopen_is_consumed_by_the_first_render(self, client):
+        client.post("/reset-land-colour", data=self._submitted_form())
+        client.get("/")
+
+        body = client.get("/").get_data(as_text=True)
+        panel = re.search(r"<details[^>]*advanced-settings[^>]*>", body)
+        assert panel and "open" not in panel.group(0)
+
+    def test_advanced_panel_is_closed_on_a_plain_render(self, client):
+        body = client.get("/").get_data(as_text=True)
+        panel = re.search(r"<details[^>]*advanced-settings[^>]*>", body)
+        assert panel and "open" not in panel.group(0)
+
+    @pytest.mark.parametrize("button", ["reset-land", "reset-ocean"])
+    def test_reset_buttons_are_submits_wired_to_the_form(self, client, button):
+        # form= is load-bearing: the button sits outside <form id="colouriser-form">.
+        body = client.get("/").get_data(as_text=True)
+        m = re.search(rf'<button[^>]*id="{button}"[^>]*>', body, re.DOTALL)
+        assert m
+        tag = m.group(0)
+        assert 'type="submit"' in tag
+        assert 'form="colouriser-form"' in tag
+        assert "formnovalidate" in tag
+        # Shown without JS now, so it must not be hidden by the js-only rule.
+        assert "js-only" not in tag
 
     def test_option_data_attributes_carry_classes(self, client):
         body = client.get("/").get_data(as_text=True)

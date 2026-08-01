@@ -55,6 +55,11 @@ _SESSION_IMPORT_WARNINGS = "import_warnings"
 # Transient like the warnings above: set by /add-group, popped by the next
 # GET / so the new group's title field takes focus once and not on a refresh.
 _SESSION_FOCUS_GROUP = "focus_group"
+# Also transient: which <details> panel to re-open after a round-trip started
+# from inside one. The panels are an exclusive accordion (shared `name`), so a
+# single value says it all. Only reachable for actions whose button lives in the
+# panel — <details> open state isn't submitted, so nothing else can know.
+_SESSION_OPEN_PANEL = "open_panel"
 
 
 @bp.get("/")
@@ -70,6 +75,7 @@ def index() -> str:
             include_circles=bool(session.get(_SESSION_INCLUDE_CIRCLES, False)),
             warnings=session.pop(_SESSION_IMPORT_WARNINGS, []),
             focus_group=session.pop(_SESSION_FOCUS_GROUP, None),
+            open_panel=session.pop(_SESSION_OPEN_PANEL, None),
         ),
     )
 
@@ -183,6 +189,37 @@ def remove_group() -> Response:
     return redirect(url_for("main.index", _anchor=anchor))
 
 
+@bp.post("/reset-land-colour")
+def reset_land_colour() -> Response:
+    """Clear the land-colour override (no-JS path)."""
+    return _reset_base_colour(_SESSION_LAND_COLOUR)
+
+
+@bp.post("/reset-ocean-colour")
+def reset_ocean_colour() -> Response:
+    """Clear the ocean-colour override (no-JS path)."""
+    return _reset_base_colour(_SESSION_OCEAN_COLOUR)
+
+
+def _reset_base_colour(session_key: str) -> Response:
+    """Drop one base-colour override and send the user back to the form.
+
+    Land and ocean get a route each, so which colour is reset comes from the
+    URL and there is no request value to validate. The key is *removed* rather
+    than set to the default: ``GET /``
+    reads these with ``session.get(key, DEFAULT_…)``, so absence is how "not
+    overridden" is spelled — the same thing ``/reset`` does wholesale.
+
+    The pop has to follow ``_persist_form_state``, which writes both colours
+    from the submitted form. Re-opens the Advanced panel, since that is where
+    the button the user clicked lives.
+    """
+    _persist_form_state(_parse_groups(request.form))
+    session.pop(session_key, None)
+    session[_SESSION_OPEN_PANEL] = "advanced"
+    return redirect(url_for("main.index"))
+
+
 @bp.post("/import")
 def import_svg_route() -> Response:
     """Recover form state from an uploaded, previously generated SVG.
@@ -292,6 +329,7 @@ def _index_context(
     include_circles: bool,
     warnings: list[str] | None = None,
     focus_group: int | None = None,
+    open_panel: str | None = None,
 ) -> dict[str, Any]:
     """Build the shared template context for the index form.
 
@@ -320,6 +358,7 @@ def _index_context(
         "maps": MAPS,
         "include_circles": include_circles,
         "focus_group": focus_group,
+        "open_panel": open_panel,
     }
 
 

@@ -449,22 +449,31 @@ export function createApp(doc = document) {
             });
         }
         if (landColourInput && landResetBtn) {
+            // The server renders these enabled unconditionally — it can't keep an
+            // "overridden?" state truthful as the picker changes, so JS owns it
+            // and has to establish it here rather than inherit it from the markup.
+            syncResetState(landColourInput, landResetBtn, defaultLandColour);
             landColourInput.addEventListener("change", () => {
                 syncResetState(landColourInput, landResetBtn, defaultLandColour);
                 requestUpdate();
             });
-            landResetBtn.addEventListener("click", () => {
+            // type=submit for the no-JS path (posts to /reset-land-colour), so
+            // the click has to be cancelled here or JS users get a page load.
+            landResetBtn.addEventListener("click", e => {
+                e.preventDefault();
                 landColourInput.value = defaultLandColour;
                 syncResetState(landColourInput, landResetBtn, defaultLandColour);
                 requestUpdate();
             });
         }
         if (oceanColourInput && oceanResetBtn) {
+            syncResetState(oceanColourInput, oceanResetBtn, defaultOceanColour);
             oceanColourInput.addEventListener("change", () => {
                 syncResetState(oceanColourInput, oceanResetBtn, defaultOceanColour);
                 requestUpdate();
             });
-            oceanResetBtn.addEventListener("click", () => {
+            oceanResetBtn.addEventListener("click", e => {
+                e.preventDefault();
                 oceanColourInput.value = defaultOceanColour;
                 syncResetState(oceanColourInput, oceanResetBtn, defaultOceanColour);
                 requestUpdate();

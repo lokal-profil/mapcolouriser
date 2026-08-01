@@ -1,7 +1,11 @@
 {% extends "base.html" %}
 {% block header_actions %}
     <div class="header-actions">
-        <details class="advanced-settings" name="header-panels">
+        {# Re-opened after a no-JS round-trip started from inside the panel
+           (the base-colour resets); <details> state isn't submitted, so only
+           those routes can know. #}
+        <details class="advanced-settings" name="header-panels"
+                 {% if open_panel == 'advanced' %}open{% endif %}>
             <summary>Advanced</summary>
             <div class="advanced-settings-panel">
                 {% if maps|length > 1 %}
@@ -30,8 +34,14 @@
                                value="{{ land_colour }}"
                                pattern="{{ colour_pattern }}" />
                     </label>
-                    <button type="button" id="reset-land" class="js-only base-colour-reset btn-quiet btn-destructive"
-                            {% if land_colour | lower == default_land_colour | lower %}disabled{% endif %}>↺ Reset</button>
+                    {# form= is required: this button lives outside the <form>, like
+                       the colour input above it. Without JS it posts; with JS the
+                       click handler cancels the submit. Never rendered disabled:
+                       only JS can keep an "is this overridden?" state truthful as
+                       the picker changes, so main.js owns it (syncResetState). #}
+                    <button type="submit" id="reset-land" class="base-colour-reset btn-quiet btn-destructive"
+                            form="colouriser-form" formnovalidate
+                            formaction="{{ url_for('main.reset_land_colour') }}">↺ Reset</button>
                 </div>
                 {% endif %}
                 {% if current_map.ocean_classes %}
@@ -43,8 +53,9 @@
                                value="{{ ocean_colour }}"
                                pattern="{{ colour_pattern }}" />
                     </label>
-                    <button type="button" id="reset-ocean" class="js-only base-colour-reset btn-quiet btn-destructive"
-                            {% if ocean_colour | lower == default_ocean_colour | lower %}disabled{% endif %}>↺ Reset</button>
+                    <button type="submit" id="reset-ocean" class="base-colour-reset btn-quiet btn-destructive"
+                            form="colouriser-form" formnovalidate
+                            formaction="{{ url_for('main.reset_ocean_colour') }}">↺ Reset</button>
                 </div>
                 {% endif %}
                 <label class="circles-toggle" title="Only takes visible effect on compatible base maps.">
