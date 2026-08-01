@@ -1,6 +1,12 @@
 # AGENTS.md
 
-Guidance for AI coding agents working in this repository. Claude Code doesn't read `AGENTS.md` — if that's your tool, run `ln -s AGENTS.md CLAUDE.md` once per clone (the symlink is untracked).
+Guidance for AI coding agents working in this repository.
+
+## What belongs here
+
+`README.md` is for people using or deploying the tool: features, setup, running it, Toolforge. This file is for people changing it — the invariants, couplings and traps that make a change go wrong.
+
+The dividing line inside this file matters just as much: **don't restate what a module's own docstrings say — point at them.** Record something here only when it spans files, contradicts an obvious assumption, or can't be seen by reading the one file you're editing. Bullets that duplicate a docstring go stale silently, because nothing fails when the code moves on.
 
 ## Pre-commit verification
 
@@ -15,7 +21,7 @@ CI runs `ruff format --check` as a separate gate from `ruff check`. If you only 
 
 ## Running a single test
 
-- Python: `uv run pytest tests/test_routes.py::TestGenerate::test_valid_post_renders_inline_svg -q`
+- Python: `uv run pytest tests/test_routes.py::TestClass::test_name -q`
 - JS: `pnpm test -- -t "substring of test name"` (Vitest `-t` filter)
 
 ## Architecture
@@ -24,19 +30,27 @@ CI runs `ruff format --check` as a separate gate from `ruff check`. If you only 
 
 Flask app factory in `app/__init__.py`. Routes in `app/routes.py` are thin (parse / validate / persist to session); all rendering logic lives in pure leaf modules so it stays testable without a Flask context:
 
-- `app/colouriser.py` — `Group` dataclass (form validation), `build_css(groups, include_small_country_circles=False)`, `build_legend(groups)`. No Flask imports.
-- `app/maps.py` — frozen `MapInfo(filename, label, description="")` dataclass (`kw_only=True`); `MAPS` registry; `render_map(key, css)` which assembles a prepared base SVG with the user CSS injected just before `</svg>` (`<style id="map-colouriser-style" data-map="{key}">` — the `data-map` attribute is inert metadata recording which map produced the output, read back by the import path). `_prepared(key)` is `@cache`-decorated; `prime_caches()` runs at startup so request handlers do no I/O.
+- `app/colouriser.py` — `Group` dataclass (form validation), `build_css(groups, include_small_country_circles=False)`, `build_legend(groups)`. No Flask imports. **`Group`'s title validation is what makes CSS injection safe**: `render_map` splices `build_css` output straight into the SVG and relies on titles never containing `<`, `>`, `/`, `*` or `\`, so a group title can't close the `<style>` element or the CSS comment around it. Relaxing `TITLE_PATTERN` breaks a guarantee enforced two modules away.
+- `app/maps.py` — the `MAPS` registry (frozen `MapInfo`, `kw_only=True`) and `render_map(key, css)`, which injects the user CSS just before `</svg>`. `_prepared(key)` is `@cache`-decorated and `prime_caches()` runs at startup, so request handlers do no I/O; see the module and `render_map` docstrings for why.
 - `app/svg_injector.py` — `validate_svg` (XML well-formedness + literal `</svg>` close-tag) and `add_viewbox_if_missing`. `validate_svg` parses via `defusedxml` because it also vets **untrusted uploads** on the import path, not just the trusted `static/` base maps; it catches both `ParseError` and `DefusedXmlException` (the latter does not subclass the former).
-- `app/svg_import.py` — pure leaf (no Flask), mirrors `colouriser.py`. `import_svg(svg_text, valid_codes=None)` reads back the `<style ... data-map="...">` element `render_map` injects and reconstructs `ImportResult(map_key, groups, land_colour, ocean_colour, include_circles, warnings)`. Country-code validation is injected via `valid_codes` (route layer owns the pycountry coupling); unknown codes are discarded per-code and codes repeated within a group are merged to one, each with a warning (a group is skipped only when no recognized codes remain). Missing/unknown `data-map` falls back to `DEFAULT_MAP`; land/ocean blocks classify by class *overlap* with the effective map's declared classes, so they are still recovered on the fallback path, and circles (CSS-intrinsic) is recovered regardless.
+- `app/svg_import.py` — pure leaf (no Flask), mirrors `colouriser.py`; reads back the injected `<style ... data-map="…">` element to reconstruct form state. The recovery rules (per-code discards, repeated-code merging, `DEFAULT_MAP` fallback, land/ocean classification by class overlap) are all in `import_svg`'s docstring — read it before changing the parser.
 
   Import-warning conventions: end-user language (say "group" and "country code", never parser jargon like "style block"); name the affected group; truncate any file content echoed back (warnings travel via the ~4 KB session cookie); warnings must only render through `{{ warning }}` (autoescaped) — never `|safe`. The parser is deliberately tolerant of what browsers/optimizers accept (trailing `;` optional, `#rgb` expanded, duplicate code merged rather than fatal, broken group colour → keep the group with an empty colour so the form assigns a palette default) — don't tighten it back; there's an SVGO-shaped round-trip test guarding this.
 
 ### Client
 
 - `static/main.js` — ES module. Pure helpers `buildCss(state, {includeCircles})` and `buildLegend(state)` are named exports. `createApp(doc = document)` is a factory: looks up DOM elements, returns an object with `{init, addGroup, removeGroup, downloadSvg, initMap, setLivePreviewEnabled, getGroupState}` so tests can drive behaviour without dispatching synthetic events. The page entry is an inline `<script type="module">` in `index.html` calling `createApp()?.init()`.
-- `static/country_multiselect.js` — Codex MultiselectLookup-style enhancement for each group's country `<select multiple>`. Single export `createCountryMultiselect(selectEl, doc = document)`, which owns the idempotency guard (`data-enhanced`) and returns `null` for an already-enhanced select. The select stays in the DOM (hidden) as the source of truth: the widget writes `option.selected` and dispatches a bubbling `change`, so form POST, `getGroupState()`, live preview, import, and the no-JS baseline are untouched. Because a hidden `required` select would abort submits invisibly, enhancement drops `required` from the select and mirrors it as a `setCustomValidity` customError on the visible search input. `main.js` wraps it in a private `enhanceCountrySelects()` inside `createApp`, called from `init()` and after `addGroup()`. Deliberate deviations from Codex: selected countries leave the menu (chips are the removal affordance), chips are plain buttons, no query highlighting. Selection behaves like `keepInputOnSelection`: the menu stays open and the query survives each pick — preselected, so typing overwrites it.
+- `static/country_multiselect.js` — Codex MultiselectLookup-style enhancement of each group's country `<select multiple>`, applied by a private `enhanceCountrySelects()` in `createApp`. What matters when touching it:
+  - **The select stays in the DOM (hidden) as the source of truth.** The widget writes `option.selected` and dispatches a bubbling `change`, which is why form POST, `getGroupState()`, live preview, import and the no-JS baseline all keep working untouched.
+  - **`required` moves to the visible input.** A hidden `required` select aborts submits invisibly, so enhancement drops the attribute and mirrors it as a `setCustomValidity` customError on the search input.
+  - Deliberate deviations from Codex, don't "fix" them: selected countries leave the menu (chips are the removal affordance), chips are plain buttons, no query highlighting, and selection keeps the menu open with the query preselected so typing starts a fresh one.
 - `static/main.css` — single external stylesheet (extracted from a former inline `<style>` block); rules grouped by section with blank lines.
-- **Button and form-control styling follows the Codex style guide** (doc.wikimedia.org/codex) — text inputs, the base-map select, textarea, error/warning boxes (Message), and toggle switches all use Codex component colours; the toggles' compact size is a deliberate deviation. Semantic rule: progressive (blue) = produces/advances output (Generate, Download, Import); destructive (red) = discards user input (Reset, Remove group, base-colour resets); neutral = additive/utility (+ Add group, Copy). Weights: `.btn-primary.btn-progressive` (filled) for THE main action — only one visible per view (Generate is `.js-fallback`, Download is `.js-live`, so they swap); plain classes for framed normal; `.btn-quiet` for tertiary/repeated actions. Ordering: most important last, destructive first. `.btn` gives a link button styling (the Codex exception used by result.html's Download — a link on purpose; don't "fix" it into a nested `<a><button>`). Colour values are Codex design tokens (commented in main.css) — don't invent new ones.
+- **Button and form-control styling follows the Codex style guide** (doc.wikimedia.org/codex). Text inputs, the base-map select, textarea, Message boxes and toggle switches use Codex component colours; the toggles' compact size is a deliberate deviation. When adding a control:
+  - **Semantic** — progressive (blue) produces or advances output (Generate, Download, Import); destructive (red) discards user input (Reset, Remove group, base-colour resets); neutral is additive or utility (+ Add group, Copy).
+  - **Weight** — `.btn-primary.btn-progressive` (filled) for THE main action, only one visible per view (Generate is `.js-fallback`, Download `.js-live`, so they swap); plain classes for framed normal; `.btn-quiet` for tertiary or repeated actions.
+  - **Order** — most important last, destructive first.
+  - **Colours** — Codex design tokens only, commented in `main.css`; don't invent new ones.
+  - `.btn` styles a *link* as a button — the Codex exception used by result.html's Download. It is a link on purpose; don't "fix" it into a nested `<a><button>`.
 - `app/templates/base.html` — shell with FOUC-prevention inline script in `<head>`, h1 + `header_actions` block, the `config.TEST_DEPLOYMENT` banner (set from the env var of the same name in the app factory; README documents the Toolforge side), page footer, and `<link rel="stylesheet" href="...main.css">`.
 - `index.html` and `result.html` extend `base.html`.
 
@@ -90,3 +104,7 @@ A button that works without JS is a real `type="submit"` with `formaction` + `fo
 
 - **JS** — committed code never assigns `innerHTML`, so the suites build their DOM with `DOMParser + document.documentElement.replaceWith(...)` instead. Follow the same pattern when adding JS tests. (Under Claude Code a project hook enforces this; on other tooling treat it as convention.)
 - **Import edge cases** — `tests/test_svg_import.py` has a `_lenient_group` helper that builds a `Group` with validation bypassed, so fixtures carrying values `Group` rejects (non-alpha-2 codes, repeated codes, non-`#rrggbb` colours) still render through `build_css` and stay coupled to its block format. Use it whenever the invalid thing is a *value*. Keep literal CSS strings when the invalid thing is the block *shape* — optional semicolons, minified/SVGO input, a block with no `fill` rule — since generating those from our own formatter would test it against itself. Land/ocean colour shorthand also has to stay literal: `build_css` re-validates those two colours and would reject `#ddd` before it reached the output.
+
+---
+
+Using Claude Code? It reads `CLAUDE.md`, not `AGENTS.md`. Run `ln -s AGENTS.md CLAUDE.md` once per clone — the symlink is gitignored.
