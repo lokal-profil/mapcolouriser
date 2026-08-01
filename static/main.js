@@ -164,8 +164,10 @@ export function createApp(doc = document) {
         }
         // `id`/`for` carry __INDEX__ too (label↔select association) — patch
         // them alongside `name` so each cloned group keeps unique, paired ids.
+        // `value` carries it as well, on the remove button's no-JS payload;
+        // other `value` attributes hold no placeholder, so patching is a no-op.
         root.querySelectorAll("[name], [id], [for]").forEach(el => {
-            for (const attr of ["name", "id", "for"]) {
+            for (const attr of ["name", "id", "for", "value"]) {
                 const val = el.getAttribute(attr);
                 if (val) el.setAttribute(attr, val.replaceAll("__INDEX__", idxStr));
             }
@@ -352,10 +354,17 @@ export function createApp(doc = document) {
         // re-render) arrive as plain selects — enhance them first.
         enhanceCountrySelects();
 
-        addBtn.addEventListener("click", addGroup);
+        // Both buttons are type=submit so they work without JS (posting to
+        // /add-group and /remove-group). Cancelling the click cancels the
+        // submission, so with JS on these stay client-side with no page load.
+        addBtn.addEventListener("click", function (e) {
+            e.preventDefault();
+            addGroup();
+        });
 
         groupsContainer.addEventListener("click", function (e) {
             if (e.target.matches(".remove-group")) {
+                e.preventDefault();
                 const groupEl = e.target.closest(".group");
                 if (groupEl) {
                     removeGroup(groupEl);

@@ -40,6 +40,12 @@ _GROUP_KEY_RE = re.compile(r"^group\[(\d+)\]")
 # coupling so app.colouriser stays a pure leaf module. Computed once at import.
 _VALID_CODES = frozenset(code for _, code in all_countries())
 
+# Upper bound for the no-JS add-group route. Groups live in the ~4 KB session
+# cookie, and an oversized cookie is dropped silently, so the route that can be
+# POSTed in a loop needs a ceiling. Measured against the submitted list length,
+# never a high-water mark: removing groups frees the allowance again.
+_MAX_GROUPS = 30
+
 _SESSION_MAP_KEY = "map_key"
 _SESSION_LAST_GROUPS = "last_groups"
 _SESSION_INCLUDE_CIRCLES = "include_circles"
@@ -107,6 +113,45 @@ def reset() -> Response:
     session.pop(_SESSION_LAND_COLOUR, None)
     session.pop(_SESSION_OCEAN_COLOUR, None)
     return redirect(url_for("main.index"))
+
+
+@bp.post("/add-group")
+def add_group() -> Response:
+    """Append a blank group and send the user back to the form (no-JS path).
+
+    With JS the button's click handler cancels the submit and clones the group
+    template client-side; this is the fallback that does the same thing over a
+    round-trip. Not a submit attempt, so nothing is validated or rendered.
+    """
+    raw_groups = _parse_groups(request.form)
+    if len(raw_groups) < _MAX_GROUPS:
+        # max + 1, matching nextIndex() in main.js: indices are never reused, so
+        # a new group can't inherit the palette default of a group that is still
+        # on the form (see the `default_colours[index % len]` fallback).
+        next_index = max((g["index"] for g in raw_groups), default=-1) + 1
+        raw_groups.append({"index": next_index, "title": "", "colour": "", "countries": []})
+    _persist_form_state(raw_groups)
+    return redirect(url_for("main.index", _anchor="groups"))
+
+
+@bp.post("/remove-group")
+def remove_group() -> Response:
+    """Drop the posted group index and send the user back to the form (no-JS path).
+
+    Removing the only group leaves one blank group rather than none: ``GET /``
+    falls back to ``_default_form_state()`` for an empty list, so an empty
+    session would reappear as *two* groups. The JS path can hold zero groups
+    (Generate and Download disable themselves) — a deliberate divergence.
+    """
+    raw_groups = _parse_groups(request.form)
+    try:
+        target = int(request.form.get("remove", ""))
+    except ValueError:
+        target = None
+    if target is not None:
+        raw_groups = [g for g in raw_groups if g["index"] != target]
+    _persist_form_state(raw_groups or _default_form_state(1))
+    return redirect(url_for("main.index", _anchor="groups"))
 
 
 @bp.post("/import")
@@ -257,8 +302,31 @@ def _build_groups(raw_groups: list[dict[str, Any]]) -> list[Group]:
     ]
 
 
-def _default_form_state() -> list[dict[str, Any]]:
-    return [{"index": i, "title": "", "colour": "", "countries": []} for i in range(2)]
+def _default_form_state(count: int = 2) -> list[dict[str, Any]]:
+    return [{"index": i, "title": "", "colour": "", "countries": []} for i in range(count)]
+
+
+def _persist_form_state(raw_groups: list[dict[str, Any]]) -> None:
+    """Store groups plus the form's Advanced settings for the next ``GET /``.
+
+    Used by the add/remove-group routes, which round-trip the whole form so the
+    user's typed values survive. Unlike ``/generate`` these routes don't
+    validate, so the base map and land/ocean colours are only written when they
+    are usable, leaving the previous session value in place otherwise (the rule
+    ``/import`` follows too). Nothing downstream trusts them blindly —
+    ``/download`` normalises an unknown map key and answers 400 on a colour
+    ``build_css`` rejects — but a session poisoned from here would break the
+    user's next download until they submitted the form again.
+    """
+    session[_SESSION_LAST_GROUPS] = raw_groups
+    session[_SESSION_INCLUDE_CIRCLES] = request.form.get("circles") == "1"
+    map_key = request.form.get("map") or DEFAULT_MAP
+    if map_key in MAPS:
+        session[_SESSION_MAP_KEY] = map_key
+    land_colour, ocean_colour, base_errors = _resolve_base_colours(request.form)
+    if not base_errors:
+        session[_SESSION_LAND_COLOUR] = land_colour
+        session[_SESSION_OCEAN_COLOUR] = ocean_colour
 
 
 def _resolve_base_colours(form) -> tuple[str, str, list[str]]:

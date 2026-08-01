@@ -25,8 +25,8 @@ const FIXTURE_HTML = `<!doctype html>
         <div id="groups"></div>
         <button type="submit" id="generate-map" class="js-fallback">Generate map</button>
         <button type="submit" id="reset-groups" formaction="/reset" formnovalidate>Reset</button>
+        <button type="submit" id="add-group" formaction="/add-group" formnovalidate>+ Add group</button>
     </form>
-    <button id="add-group">+ Add group</button>
     <select id="base-map-select" name="map" form="colouriser-form">
         <option value="world" selected data-land-classes="landxx,circlexx" data-ocean-classes="oceanxx">World</option>
         <option value="world-compact" data-land-classes="landxx,circlexx" data-ocean-classes="oceanxx">World (compact)</option>
@@ -49,6 +49,9 @@ const FIXTURE_HTML = `<!doctype html>
                 <option value="se">Sweden</option>
                 <option value="de">Germany</option>
             </select>
+            <button type="submit" name="remove" value="__INDEX__"
+                    formaction="/remove-group" formnovalidate
+                    class="remove-group">Remove group</button>
         </div>
     </template>
     <div id="map-preview"></div>
@@ -275,6 +278,51 @@ describe("createApp", () => {
             const remaining = document.querySelectorAll(".group");
             expect(remaining).toHaveLength(1);
             expect(remaining[0].dataset.index).toBe("1");
+        });
+    });
+
+    describe("no-JS fallback buttons", () => {
+        // Add/Remove are type=submit so they work with JS off, posting to
+        // /add-group and /remove-group. With JS the click handlers must cancel
+        // the event, or every add and remove becomes a page load.
+        function click(el) {
+            const event = new MouseEvent("click", { bubbles: true, cancelable: true });
+            el.dispatchEvent(event);
+            return event;
+        }
+
+        it("cancels the submit when Add group is clicked, and adds the group", () => {
+            const app = createApp();
+            app.init();
+
+            const event = click(document.getElementById("add-group"));
+
+            expect(event.defaultPrevented).toBe(true);
+            expect(document.querySelectorAll(".group")).toHaveLength(1);
+        });
+
+        it("cancels the submit when Remove group is clicked, and removes the group", () => {
+            const app = createApp();
+            app.init();
+            app.addGroup();
+            app.addGroup();
+
+            const event = click(document.querySelector(".group .remove-group"));
+
+            expect(event.defaultPrevented).toBe(true);
+            const remaining = document.querySelectorAll(".group");
+            expect(remaining).toHaveLength(1);
+            expect(remaining[0].dataset.index).toBe("1");
+        });
+
+        it("patches the index into the cloned remove button's submit value", () => {
+            const app = createApp();
+            app.addGroup();
+            app.addGroup();
+
+            const values = Array.from(document.querySelectorAll(".remove-group"))
+                .map(el => el.getAttribute("value"));
+            expect(values).toEqual(["0", "1"]);
         });
     });
 

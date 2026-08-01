@@ -5,6 +5,7 @@ from html.parser import HTMLParser
 import pytest
 from markupsafe import escape
 
+from app import routes
 from app.colouriser import Group, build_css
 from app.maps import MAPS, render_map
 
@@ -686,6 +687,165 @@ class TestReset:
         # No session set up — reset should still succeed.
         resp = client.post("/reset")
         assert resp.status_code == 302
+
+
+class TestGroupActions:
+    """The no-JS add/remove-group fallbacks (with JS, the click is cancelled)."""
+
+    def _form(self, count=2, **extra):
+        """A submitted form body with ``count`` filled-in groups."""
+        data = {}
+        for i in range(count):
+            data[f"group[{i}][title]"] = f"G{i}"
+            data[f"group[{i}][colour]"] = "#ff0000"
+            data[f"group[{i}][countries][]"] = ["se"]
+        data.update(extra)
+        return data
+
+    def test_add_appends_a_blank_group_and_redirects_to_the_group_list(self, client):
+        resp = client.post("/add-group", data=self._form(2))
+
+        assert resp.status_code == 302
+        assert resp.headers["Location"].endswith("/#groups")
+        with client.session_transaction() as s:
+            assert [g["index"] for g in s["last_groups"]] == [0, 1, 2]
+            assert s["last_groups"][2] == {
+                "index": 2,
+                "title": "",
+                "colour": "",
+                "countries": [],
+            }
+
+    def test_add_preserves_typed_values(self, client):
+        client.post("/add-group", data=self._form(2))
+
+        body = client.get("/").get_data(as_text=True)
+        assert 'value="G0"' in body
+        assert 'value="G1"' in body
+        assert body.count('name="group[2][title]"') == 1
+
+    def test_add_uses_max_index_plus_one_so_palette_defaults_never_collide(self, client):
+        # Sparse indices (0, 2) are what a JS-side removal leaves behind. The new
+        # group must be 3, not 2: index 2's palette colour is still on the form,
+        # carried as a concrete value by the surviving group.
+        data = {
+            "group[0][title]": "G0",
+            "group[0][colour]": "#ff0000",
+            "group[0][countries][]": ["se"],
+            "group[2][title]": "G2",
+            "group[2][colour]": "#00ff00",
+            "group[2][countries][]": ["de"],
+        }
+        client.post("/add-group", data=data)
+
+        with client.session_transaction() as s:
+            assert [g["index"] for g in s["last_groups"]] == [0, 2, 3]
+
+    def test_remove_drops_the_posted_index_only(self, client):
+        client.post("/remove-group", data=self._form(3, remove="1"))
+
+        with client.session_transaction() as s:
+            assert [g["index"] for g in s["last_groups"]] == [0, 2]
+            assert [g["title"] for g in s["last_groups"]] == ["G0", "G2"]
+
+    def test_removing_the_only_group_leaves_one_blank_group(self, client):
+        # Not a no-op (a dead button reads as broken) and not zero: GET / renders
+        # _default_form_state() for an empty list, which would be *two* groups.
+        client.post("/remove-group", data=self._form(1, remove="0"))
+
+        with client.session_transaction() as s:
+            assert s["last_groups"] == [{"index": 0, "title": "", "colour": "", "countries": []}]
+        body = client.get("/").get_data(as_text=True)
+        assert body.count('name="group[0][title]"') == 1
+        assert body.count('name="group[1][title]"') == 0
+
+    @pytest.mark.parametrize("value", ["", "abc", "__INDEX__", "99"])
+    def test_remove_with_unusable_index_changes_nothing(self, client, value):
+        client.post("/remove-group", data=self._form(2, remove=value))
+
+        with client.session_transaction() as s:
+            assert [g["index"] for g in s["last_groups"]] == [0, 1]
+
+    def test_remove_without_the_field_changes_nothing(self, client):
+        client.post("/remove-group", data=self._form(2))
+
+        with client.session_transaction() as s:
+            assert [g["index"] for g in s["last_groups"]] == [0, 1]
+
+    @pytest.mark.parametrize(
+        ("path", "extra"),
+        [("/add-group", {}), ("/remove-group", {"remove": "1"})],
+    )
+    def test_advanced_settings_survive_the_round_trip(self, client, path, extra):
+        data = self._form(
+            2,
+            map="world-compact",
+            circles="1",
+            land_colour="#112233",
+            ocean_colour="#abcdef",
+            **extra,
+        )
+        client.post(path, data=data)
+
+        with client.session_transaction() as s:
+            assert s["map_key"] == "world-compact"
+            assert s["include_circles"] is True
+            assert s["land_colour"] == "#112233"
+            assert s["ocean_colour"] == "#abcdef"
+
+    def test_advanced_settings_survive_removing_the_only_group(self, client):
+        # The blank-group branch throws the posted groups away; it must not throw
+        # the Advanced settings out with them.
+        data = self._form(
+            1,
+            remove="0",
+            map="world-compact",
+            circles="1",
+            land_colour="#112233",
+            ocean_colour="#abcdef",
+        )
+        client.post("/remove-group", data=data)
+
+        with client.session_transaction() as s:
+            assert s["last_groups"] == [{"index": 0, "title": "", "colour": "", "countries": []}]
+            assert s["map_key"] == "world-compact"
+            assert s["include_circles"] is True
+            assert s["land_colour"] == "#112233"
+            assert s["ocean_colour"] == "#abcdef"
+
+    @pytest.mark.parametrize(
+        ("field", "value", "key"),
+        [("map", "no-such-map", "map_key"), ("land_colour", "bogus", "land_colour")],
+    )
+    def test_unusable_advanced_value_leaves_the_session_untouched(self, client, field, value, key):
+        # These routes don't validate. /download normalises an unknown map key
+        # and answers 400 on a colour build_css rejects, so a poisoned session
+        # would break the next download rather than crash the request.
+        with client.session_transaction() as s:
+            s["map_key"] = "world"
+            s["land_colour"] = "#112233"
+        before = {"map_key": "world", "land_colour": "#112233"}[key]
+
+        client.post("/add-group", data=self._form(1, **{field: value}))
+
+        with client.session_transaction() as s:
+            assert s[key] == before
+
+    def test_add_is_capped(self, client):
+        client.post("/add-group", data=self._form(routes._MAX_GROUPS))
+
+        with client.session_transaction() as s:
+            assert len(s["last_groups"]) == routes._MAX_GROUPS
+
+    def test_cap_measures_the_current_list_not_a_high_water_mark(self, client):
+        # Filling up then removing has to free the allowance again.
+        client.post("/remove-group", data=self._form(routes._MAX_GROUPS, remove="0"))
+        with client.session_transaction() as s:
+            assert len(s["last_groups"]) == routes._MAX_GROUPS - 1
+
+        client.post("/add-group", data=self._form(routes._MAX_GROUPS - 1))
+        with client.session_transaction() as s:
+            assert len(s["last_groups"]) == routes._MAX_GROUPS
 
 
 class TestImport:

@@ -135,7 +135,11 @@
                             </select>
                         </label>
                         <div class="actions">
-                            <button type="button" class="remove-group btn-quiet btn-destructive">Remove group</button>
+                            {# type=submit + formaction is the no-JS fallback; main.js
+                               cancels the click so JS users never reload. #}
+                            <button type="submit" name="remove" value="{{ group.index }}"
+                                    formaction="{{ url_for('main.remove_group') }}" formnovalidate
+                                    class="remove-group btn-quiet btn-destructive">Remove group</button>
                         </div>
                     </div>
                 {% endfor %}
@@ -146,7 +150,8 @@
                 <button type="submit" id="reset-groups" class="btn-destructive"
                         formaction="{{ url_for('main.reset') }}"
                         formnovalidate>Reset</button>
-                <button type="button" id="add-group">+ Add group</button>
+                <button type="submit" id="add-group"
+                        formaction="{{ url_for('main.add_group') }}" formnovalidate>+ Add group</button>
                 <button type="submit" id="generate-map" class="js-fallback btn-primary btn-progressive">Generate map</button>
             </div>
         </form>
@@ -190,7 +195,11 @@
                 </select>
             </label>
             <div class="actions">
-                <button type="button" class="remove-group btn-quiet btn-destructive">Remove group</button>
+                {# Mirrors the server-rendered button above; __INDEX__ in `value` is
+                   patched by patchPlaceholders like the name/id placeholders. #}
+                <button type="submit" name="remove" value="__INDEX__"
+                        formaction="{{ url_for('main.remove_group') }}" formnovalidate
+                        class="remove-group btn-quiet btn-destructive">Remove group</button>
             </div>
         </div>
     </template>
